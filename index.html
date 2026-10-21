@@ -216,6 +216,14 @@ table.inv{min-width:760px}
 .checks li p{margin:2px 0 0;color:var(--muted);font-size:14px;max-width:70ch}
 .checks .chip{margin-top:3px}
 .field .hint{font-size:12px}
+.bkhelp{display:grid;gap:10px;margin-top:8px}
+.bksteps{margin:0;padding-left:20px;display:grid;gap:4px}
+.btn{display:inline-flex;align-items:center;font:600 14px var(--f-body);border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:7px 12px;cursor:pointer}
+.btn:focus-within,.btn:hover{border-color:var(--accent)}
+.bkconfirm{border:1px solid var(--accent);background:var(--accent-soft);border-radius:8px;padding:10px 12px;display:grid;gap:8px}
+.bkconfirm p{margin:0;font-size:14px}
+.bkalt{border-top:1px solid var(--line);padding-top:8px}
+.savehelp{flex-basis:100%;margin:0;font-size:13px;color:var(--muted)}
 .ideal .bk{display:grid;gap:4px;align-content:start}
 .ideal .v{font-size:22px;color:var(--accent)}
 .ideal .tip{margin:0;font-size:13px;color:var(--muted)}
@@ -251,8 +259,9 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
     <label for="userSel">Usuario <select id="userSel"></select></label>
     <label for="yearSel">Ejercicio <select id="yearSel"></select></label>
     <button id="saveYear" type="button" class="primary">Guardar año</button>
-    <button id="discard" type="button" hidden>Descartar cambios</button>
+    <button id="discard" type="button" hidden>Volver a lo guardado</button>
     <span id="saveState" class="savestate" aria-live="polite"></span>
+    <p class="savehelp">Todo se guarda solo en este dispositivo mientras trabajas. «Guardar año» marca la versión buena del año: la que sale en «Años guardados» y en la comparación entre años, y a la que puedes volver si luego algo se estropea.</p>
     <div class="savedyears" id="savedYears"></div>
     <details>
       <summary>Usuarios</summary>
@@ -270,10 +279,28 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
     </details>
     <details>
       <summary>Copia de seguridad</summary>
-      <p class="note">Los años guardados viven solo en este navegador. Si borras los datos del navegador o cambias de dispositivo, se pierden. Copia la copia de seguridad y pégala en un archivo de notas; para recuperarla, pégala aquí y pulsa «Restaurar».</p>
-      <div class="toolbar"><button id="bkCopy" type="button">Copiar copia de seguridad</button></div>
-      <textarea id="bkText" placeholder="Pega aquí una copia de seguridad para restaurarla" style="margin-top:8px"></textarea>
-      <div class="toolbar" style="margin-top:8px"><button id="bkRestore" type="button">Restaurar</button><span id="bkMsg" class="note" aria-live="polite"></span></div>
+      <div class="bkhelp">
+        <p class="note">Tus datos viven solo en este dispositivo y se guardan solos mientras trabajas. La copia de seguridad es un archivo con <strong>todos tus usuarios y años</strong>. Sirve para no perder nada si cambias de móvil o borras el navegador, y para pasar los datos de un dispositivo a otro.</p>
+        <ol class="note bksteps"><li><strong>Hacer la copia:</strong> pulsa «Descargar copia» y guarda el archivo (en Drive, el correo o el ordenador).</li><li><strong>Recuperarla:</strong> en el otro dispositivo pulsa «Cargar copia», elige ese archivo y confirma.</li></ol>
+        <div class="toolbar" id="bkFileBox">
+          <button id="bkDown" type="button" class="primary">⬇ Descargar copia</button>
+          <label class="btn" for="bkIn">⬆ Cargar copia</label>
+          <input type="file" id="bkIn" accept=".json,application/json,.txt" hidden>
+        </div>
+        <p class="note" id="bkNoFile" hidden>En esta vista no se pueden descargar archivos. Usa la app en quinigrama.github.io/MiRenta o el método de copiar y pegar de abajo.</p>
+        <div class="bkconfirm" id="bkConfirm" hidden>
+          <p id="bkSummary"></p>
+          <div class="toolbar"><button id="bkYes" type="button" class="primary">Sí, restaurar</button><button id="bkNo" type="button">Cancelar</button></div>
+        </div>
+        <p class="note" id="bkMsg" aria-live="polite"></p>
+        <details class="bkalt">
+          <summary>Sin archivos: copiar y pegar como texto</summary>
+          <p class="note">Pulsa «Copiar como texto» y pégalo en una nota. Para recuperarlo, pega ese texto en el cuadro y pulsa «Restaurar desde el texto».</p>
+          <div class="toolbar"><button id="bkCopy" type="button">Copiar como texto</button></div>
+          <textarea id="bkText" placeholder="Pega aquí el texto de una copia de seguridad" style="margin-top:8px"></textarea>
+          <div class="toolbar" style="margin-top:8px"><button id="bkRestore" type="button">Restaurar desde el texto</button></div>
+        </details>
+      </div>
     </details>
   </div>
 
@@ -2074,8 +2101,8 @@ function renderSaveState(){
   const el = $("saveState"), dr = store.drafts[curYear], sv = store.saved[curYear];
   $("discard").hidden = !dr;
   if (!storageOk){ el.className = "savestate dirty"; el.textContent = "Este navegador no permite guardar aquí (¿ventana privada?). Usa la copia de seguridad."; return; }
-  if (dr){ el.className = "savestate dirty"; el.textContent = sv ? `Cambios sin guardar desde el ${fmtDate(sv.at)}` : "Año sin guardar todavía"; }
-  else if (sv){ el.className = "savestate ok"; el.textContent = `Guardado el ${fmtDate(sv.at)}`; }
+  if (dr){ el.className = "savestate dirty"; el.textContent = sv ? `Hay cambios desde la versión buena del ${fmtDate(sv.at)} (están a salvo; pulsa «Guardar año» si los das por buenos)` : "Tus datos están a salvo, pero este año aún no tiene versión buena: pulsa «Guardar año»"; }
+  else if (sv){ el.className = "savestate ok"; el.textContent = `✓ Versión buena guardada el ${fmtDate(sv.at)}`; }
   else { el.className = "savestate"; el.textContent = "Sin datos para este año"; }
 }
 function renderYear(){
@@ -2105,27 +2132,63 @@ $("saveYear").onclick = () => {
 };
 const disc = $("discard"); let discT;
 disc.onclick = () => {
-  if (!disc.dataset.armed){ disc.dataset.armed = "1"; disc.textContent = "¿Seguro? Pulsa otra vez"; clearTimeout(discT); discT = setTimeout(() => { delete disc.dataset.armed; disc.textContent = "Descartar cambios"; }, 3500); return; }
-  delete disc.dataset.armed; disc.textContent = "Descartar cambios";
+  if (!disc.dataset.armed){ disc.dataset.armed = "1"; disc.textContent = "Se pierden los cambios desde la versión buena. Pulsa otra vez"; clearTimeout(discT); discT = setTimeout(() => { delete disc.dataset.armed; disc.textContent = "Volver a lo guardado"; }, 4000); return; }
+  delete disc.dataset.armed; disc.textContent = "Volver a lo guardado";
   delete store.drafts[curYear]; loadYear(curYear); render();
 };
-$("bkCopy").onclick = async () => {
-  const txt = JSON.stringify({app:"miRenta", v:1, saved:store.saved, drafts:store.drafts}), msg = $("bkMsg");
-  try { await navigator.clipboard.writeText(txt); msg.textContent = "Copia copiada. Pégala en un archivo de notas."; }
-  catch(e){ const t = $("bkText"); t.value = txt; t.select(); msg.textContent = "Selecciona el texto de arriba y cópialo."; }
-};
-const rest = $("bkRestore");
-rest.onclick = () => {
+// ---------- Copia de seguridad: un archivo con todos los usuarios y sus años ----------
+function buildBackup(){
+  writeStore();
+  const list = users.list.map(u => {
+    let data = null; try { data = JSON.parse(localStorage.getItem(ukey(u.id))||"null"); } catch(e){}
+    if (u.id===users.cur) data = store;
+    return { id:u.id, name:u.name, data: data || {saved:{}, drafts:{}, last:curYear} };
+  });
+  return { app:"miRenta", v:2, fecha:new Date().toISOString(), users:list };
+}
+const yearsOf = d => [...new Set([...Object.keys(d?.saved||{}), ...Object.keys(d?.drafts||{})])].sort();
+let pendingBk = null;
+function previewBackup(txt){
   const msg = $("bkMsg"); let d;
-  try { d = JSON.parse($("bkText").value); } catch(e){ msg.textContent = "Ese texto no es una copia de seguridad válida."; return; }
-  if (!d || d.app!=="miRenta" || typeof d.saved!=="object"){ msg.textContent = "Ese texto no es una copia de seguridad de Mi Renta."; return; }
-  if (!rest.dataset.armed){ rest.dataset.armed = "1"; rest.textContent = "Sustituirá los años de la copia. Pulsa otra vez"; return; }
-  delete rest.dataset.armed; rest.textContent = "Restaurar";
-  Object.assign(store.saved, d.saved||{}); Object.assign(store.drafts, d.drafts||{});
-  for (const y of Object.keys(d.saved||{})) if (!(d.drafts||{})[y]) delete store.drafts[y];
-  writeStore(); loadYear(curYear); render();
-  msg.textContent = `Restaurados: ${Object.keys(d.saved||{}).sort().join(", ") || "ningún año"}.`; $("bkText").value = "";
+  try { d = JSON.parse(txt); } catch(e){ msg.textContent = "Ese archivo no es una copia de seguridad válida."; return; }
+  if (!d || d.app!=="miRenta"){ msg.textContent = "Ese archivo no es una copia de seguridad de Mi Renta."; return; }
+  // Copias antiguas (de un solo usuario): van al usuario abierto
+  if (!Array.isArray(d.users)) d = { app:"miRenta", v:2, users:[{ id:users.cur, name:curUser().name, data:{ saved:d.saved||{}, drafts:d.drafts||{}, last:curYear } }] };
+  pendingBk = d;
+  const lines = d.users.map(u => `<li><strong>${esc(u.name)}</strong>: ${yearsOf(u.data).join(", ") || "sin años"}${users.list.some(x => x.id===u.id || x.name===u.name) ? " (sustituye al de este dispositivo)" : " (usuario nuevo)"}</li>`).join("");
+  $("bkSummary").innerHTML = `La copia${d.fecha ? " del " + fmtDate(Date.parse(d.fecha)) : ""} tiene:<ul style="margin:6px 0 0;padding-left:20px">${lines}</ul>`;
+  $("bkConfirm").hidden = false; msg.textContent = "";
+}
+$("bkYes").onclick = () => {
+  const d = pendingBk; if (!d) return;
+  for (const u of d.users){
+    let tgt = users.list.find(x => x.id===u.id) || users.list.find(x => x.name===u.name);
+    if (!tgt){ tgt = { id:u.id || ("u"+Date.now().toString(36)), name:u.name || "Usuario" }; users.list.push(tgt); }
+    try { localStorage.setItem(ukey(tgt.id), JSON.stringify({ saved:{}, drafts:{}, last:curYear, ...(u.data||{}) })); } catch(e){ $("bkMsg").textContent = "No se ha podido guardar en este navegador (¿ventana privada?)."; return; }
+  }
+  saveUsers(); pendingBk = null; $("bkConfirm").hidden = true;
+  KS = ukey(users.cur); load(); render();
+  $("bkMsg").textContent = `✓ Restaurado: ${d.users.map(u => u.name).join(", ")}.`;
 };
+$("bkNo").onclick = () => { pendingBk = null; $("bkConfirm").hidden = true; $("bkMsg").textContent = "Restauración cancelada."; };
+// En la vista de Claude (dentro de un marco) no se pueden descargar archivos
+const inFrame = (() => { try { return window.self !== window.top; } catch(e){ return true; } })();
+$("bkDown").hidden = inFrame; $("bkNoFile").hidden = !inFrame;
+$("bkDown").onclick = () => {
+  const blob = new Blob([JSON.stringify(buildBackup())], {type:"application/json"});
+  const d = new Date(), z = n => String(n).padStart(2,"0");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `mi-renta-copia-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  $("bkMsg").textContent = "✓ Copia descargada. Guárdala en un sitio seguro: lleva tus datos fiscales.";
+};
+$("bkIn").addEventListener("change", async e => { const f = e.target.files[0]; e.target.value = ""; if (f) previewBackup(await f.text()); });
+$("bkCopy").onclick = async () => {
+  const txt = JSON.stringify(buildBackup()), msg = $("bkMsg");
+  try { await navigator.clipboard.writeText(txt); msg.textContent = "✓ Copiado. Pégalo en una nota para guardarlo."; }
+  catch(e){ const t = $("bkText"); t.value = txt; t.select(); msg.textContent = "Selecciona el texto del cuadro y cópialo."; }
+};
+$("bkRestore").onclick = () => { previewBackup($("bkText").value); $("bkText").value = ""; };
 
 load(); initTabs(); render();
 })();

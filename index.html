@@ -285,7 +285,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         <div class="toolbar" id="bkFileBox">
           <button id="bkDown" type="button" class="primary">⬇ Descargar copia</button>
           <label class="btn" for="bkIn">⬆ Cargar copia</label>
-          <input type="file" id="bkIn" accept=".json,application/json,.txt" hidden>
+          <input type="file" id="bkIn" accept=".txt,text/plain,.json,application/json" hidden>
         </div>
         <p class="note" id="bkNoFile" hidden>En esta vista no se pueden descargar archivos. Usa la app en quinigrama.github.io/MiRenta o el método de copiar y pegar de abajo.</p>
         <div class="bkconfirm" id="bkConfirm" hidden>
@@ -2175,10 +2175,10 @@ $("bkNo").onclick = () => { pendingBk = null; $("bkConfirm").hidden = true; $("b
 const inFrame = (() => { try { return window.self !== window.top; } catch(e){ return true; } })();
 $("bkDown").hidden = inFrame; $("bkNoFile").hidden = !inFrame;
 $("bkDown").onclick = () => {
-  const blob = new Blob([JSON.stringify(buildBackup())], {type:"application/json"});
+  const blob = new Blob([JSON.stringify(buildBackup())], {type:"text/plain;charset=utf-8"});
   const d = new Date(), z = n => String(n).padStart(2,"0");
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `mi-renta-copia-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}.json`;
+  a.download = `mi-renta-copia-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}.txt`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   $("bkMsg").textContent = "✓ Copia descargada. Guárdala en un sitio seguro: lleva tus datos fiscales.";
 };

@@ -1,0 +1,2136 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Estimación de la renta y del patrimonio: nóminas, bancos, inversiones, plan de pensiones e inmuebles. Todo se lee y se guarda en tu navegador.">
+<meta name="theme-color" content="#1D5D7C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mi Renta">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Mi Renta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: barra de ejercicio arriba; pestañas Nóminas / Bancos a la izquierda; liquidación conjunta como "papeleta" fija a la derecha.
+   Antes: hoja de nóminas a la izquierda (carga, tabla, gráfico), liquidación de la renta como "papeleta" fija a la derecha */
+:root{
+  --bg:#EDF1F0; --paper:#FBFCFB; --ink:#16212A; --muted:#5A6870; --line:#D2DAD8;
+  --accent:#1D5D7C; --accent-soft:#DCE8EE;
+  --neto:#1D5D7C; --ss:#B9852B; --irpf:#8E3B46;
+  --pay:#A3412F; --pay-soft:#F6E3DE; --refund:#2B7A4F; --refund-soft:#DDEFE4; --warn:#9A6A12; --warn-soft:#F5EBD3;
+  --p1:#1D5D7C; --p2:#4F9BB5; --p3:#B9852B; --p4:#8E3B46; --p5:#6B5CA5; --p6:#7C8A92; --p7:#2B7A4F; --p8:#C26A3D; --p9:#4C6B8A; --p10:#A3A08A;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-num:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1417; --paper:#162026; --ink:#E3E9EB; --muted:#92A1A8; --line:#2A363D;
+    --accent:#72B3D3; --accent-soft:#1C3441;
+    --neto:#5E9FC0; --ss:#D6A64F; --irpf:#C9707C;
+    --pay:#E58A75; --pay-soft:#3A2420; --refund:#6CC495; --refund-soft:#1C3328; --warn:#E0B65A; --warn-soft:#352C17;
+  --p1:#72B3D3; --p2:#9ED0E2; --p3:#D6A64F; --p4:#C9707C; --p5:#A397DE; --p6:#9AA8B0; --p7:#6CC495; --p8:#E39468; --p9:#8FB0D1; --p10:#C9C5A8;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1417; --paper:#162026; --ink:#E3E9EB; --muted:#92A1A8; --line:#2A363D;
+  --accent:#72B3D3; --accent-soft:#1C3441;
+  --neto:#5E9FC0; --ss:#D6A64F; --irpf:#C9707C;
+  --pay:#E58A75; --pay-soft:#3A2420; --refund:#6CC495; --refund-soft:#1C3328; --warn:#E0B65A; --warn-soft:#352C17;
+  --p1:#72B3D3; --p2:#9ED0E2; --p3:#D6A64F; --p4:#C9707C; --p5:#A397DE; --p6:#9AA8B0; --p7:#6CC495; --p8:#E39468; --p9:#8FB0D1; --p10:#C9C5A8;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+header{display:grid;gap:6px;margin-bottom:24px}
+.eyebrow{font-family:var(--f-num);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(30px,5vw,44px);line-height:1.05;margin:0;text-wrap:balance}
+.lede{color:var(--muted);max-width:64ch;margin:4px 0 0}
+h2{font-family:var(--f-display);font-weight:600;font-size:20px;margin:0;text-wrap:balance}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:24px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:grid;gap:20px;min-width:0}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.hint{color:var(--muted);font-size:14px}
+
+/* Zona de carga */
+.drop{display:grid;place-items:center;gap:8px;text-align:center;border:1.5px dashed var(--line);border-radius:10px;padding:26px 16px;background:var(--bg);cursor:pointer;transition:border-color .15s, background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.drop strong{font-family:var(--f-display);font-weight:600;font-size:18px}
+.drop .hint{max-width:52ch}
+.lock{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+#queue{display:grid;gap:8px;margin-top:12px}
+#queue:empty{display:none}
+.qitem{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;padding:8px 10px;border-radius:8px;background:var(--warn-soft);color:var(--ink)}
+.qitem input{flex:1 1 140px;min-width:0}
+
+/* Controles */
+button,.btn{font:600 14px var(--f-body);border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+button.danger{color:var(--pay)}
+button.ghost{border-color:transparent;background:transparent;padding:4px 6px;color:var(--muted)}
+button.ghost:hover{color:var(--ink)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text],input[type=number],select,textarea{font:15px var(--f-body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+textarea{width:100%;font-family:var(--f-num);font-size:13px;min-height:96px;resize:vertical}
+
+/* Tabla */
+.tablebox{overflow-x:auto;margin:0 -4px}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:760px}
+th{font-family:var(--f-num);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,th.l{text-align:left}
+td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle;text-align:right}
+td.l{text-align:left}
+tr.example td{color:var(--muted)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+td input.money{width:104px;text-align:right;font-family:var(--f-num);font-size:13.5px;padding:5px 6px}
+td select{font-size:14px;padding:5px 4px}
+.fname{display:block;font-size:12px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tfoot td{font-weight:600;border-bottom:none;border-top:2px solid var(--ink);padding-top:10px}
+.chip{display:inline-block;font:600 11px var(--f-num);letter-spacing:.04em;padding:2px 7px;border-radius:99px;white-space:nowrap}
+.chip.ok{background:var(--refund-soft);color:var(--refund)}
+.chip.rev{background:var(--warn-soft);color:var(--warn)}
+.chip.man{background:var(--accent-soft);color:var(--accent)}
+.chip.ej{background:var(--line);color:var(--muted)}
+.rawrow td{text-align:left;background:var(--bg)}
+.rawrow pre{margin:0;max-height:260px;overflow:auto;font:12px/1.45 var(--f-num);white-space:pre-wrap;word-break:break-word;color:var(--muted)}
+.banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px;background:var(--accent-soft);color:var(--ink);border-radius:8px;padding:10px 12px;margin-bottom:12px}
+
+/* Gráfico */
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.chartbox{overflow-x:auto}
+#chart{display:block;width:100%;min-width:520px;height:auto}
+
+/* Liquidación */
+.summary{position:sticky;top:calc(env(safe-area-inset-top, 0px) + 16px);display:grid;gap:16px}
+@media (max-width:980px){.summary{position:static}}
+.result{border-radius:10px;padding:18px;display:grid;gap:4px}
+.result.pay{background:var(--pay-soft);color:var(--pay)}
+.result.refund{background:var(--refund-soft);color:var(--refund)}
+.result .k{font:600 12px var(--f-num);letter-spacing:.08em;text-transform:uppercase}
+.result .v{font-family:var(--f-display);font-weight:700;font-size:40px;line-height:1.05;font-variant-numeric:tabular-nums}
+.result .s{font-size:14px;color:var(--ink)}
+.rates{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rate{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.rate .k{font-size:12px;color:var(--muted)}
+.rate .v{font:600 20px var(--f-num)}
+.ledger{display:grid;font-size:14px}
+.ledger .row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dotted var(--line)}
+.ledger .row span:last-child{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ledger .row.sub span:first-child{color:var(--muted);padding-left:12px}
+.ledger .row.tot{font-weight:700;border-bottom:1px solid var(--ink)}
+.ledger .sec{font:500 11px var(--f-num);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding:12px 0 4px}
+.toggle{display:flex;gap:8px;align-items:center;font-size:14px}
+.sec-mini{font:500 11px var(--f-num);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding-top:6px}
+table.resc{min-width:460px}
+table.resc tr.mine td{background:var(--accent-soft);font-weight:600}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:600;font-size:14px}
+.fields{display:grid;gap:10px;margin-top:12px}
+.field{display:grid;gap:3px;font-size:13px;color:var(--muted)}
+.field input{width:100%}
+.field.two{grid-template-columns:1fr 1fr;gap:8px}
+.labels{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px}
+.note{font-size:13px;color:var(--muted)}
+.note p{margin:6px 0}
+/* Ejercicio y guardado */
+.yearbar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:18px}
+.yearbar label{display:flex;align-items:center;gap:8px;font-weight:600}
+.yearbar select{font:600 16px var(--f-num)}
+.savestate{font-size:14px;color:var(--muted)}
+.savestate.dirty{color:var(--warn)}
+.savestate.ok{color:var(--refund)}
+.savedyears{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted);flex-basis:100%}
+.savedyears button{font:600 12px var(--f-num);padding:3px 9px;border-radius:99px}
+.savedyears button[aria-current="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.yearbar details{flex-basis:100%;border-top:1px solid var(--line)}
+/* Pestañas */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);font:600 16px var(--f-display);padding:9px 16px;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{background:var(--paper);border-color:var(--line);color:var(--ink)}
+.tabs button .cnt{font:500 11px var(--f-num);margin-left:6px;color:var(--accent)}
+.tabpanel{display:grid;gap:20px;min-width:0}
+/* Bancos */
+table.bank td input[type=text]{font-size:13.5px;padding:5px 6px}
+table.bank td input.concept{width:220px}
+table.bank select.alts{width:46px;margin-left:4px;padding:5px 2px;color:var(--accent)}
+table.bank tr.off td{opacity:.45}
+.bkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.bk{border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
+.bk .k{font-size:12px;color:var(--muted)}
+.bk .v{font:600 18px var(--f-num);font-variant-numeric:tabular-nums}
+.filechips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.filechips:empty{display:none}
+.filechip{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:2px 10px}
+.paramnote{font-size:13px;background:var(--warn-soft);color:var(--ink);border-radius:8px;padding:8px 10px;margin-bottom:10px}
+/* Barra de resultado fija */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.rbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:6px;margin-bottom:6px}
+.rbar-in{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;border-radius:10px;padding:10px 14px;background:var(--refund-soft);color:var(--refund)}
+.rbar.pay .rbar-in{background:var(--pay-soft);color:var(--pay)}
+.rbar-k{font:600 12px var(--f-num);letter-spacing:.08em;text-transform:uppercase}
+.rbar-v{font:700 24px var(--f-display);font-variant-numeric:tabular-nums}
+.rbar-s{font-size:13px;color:var(--ink)}
+.rbar-go{margin-left:auto;color:var(--ink)}
+.tabs{overflow-x:auto;scrollbar-width:none}
+.tabs button{white-space:nowrap}
+.tabwrap{padding-top:16px}
+.resgrid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:820px){.resgrid{grid-template-columns:minmax(0,1fr)}}
+.rescol{display:grid;gap:14px}
+.euro{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:6px 0 8px;background:var(--line)}
+.euro i{display:block;height:100%}
+.inmlist{display:grid;gap:14px}
+.inm{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--bg);display:grid;gap:10px}
+.inm-head{display:flex;gap:8px;align-items:center}
+.inm-head input{flex:1;min-width:0;font:600 17px var(--f-display)}
+.inm .fields{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:0}
+.inm-res{font-size:14px;color:var(--muted)}
+.inm-res b{font-family:var(--f-num);color:var(--ink)}
+[hidden]{display:none!important}
+.patgrid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:820px){.patgrid{grid-template-columns:minmax(0,1fr)}}
+.result.neutral{background:var(--accent-soft);color:var(--accent)}
+table.pat tr.zero td{color:var(--muted)}
+table.pat tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
+i.dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:-1px}
+table.inv{min-width:760px}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.checks li{display:flex;gap:12px;align-items:flex-start}
+.checks li p{margin:2px 0 0;color:var(--muted);font-size:14px;max-width:70ch}
+.checks .chip{margin-top:3px}
+.field .hint{font-size:12px}
+.ideal .bk{display:grid;gap:4px;align-content:start}
+.ideal .v{font-size:22px;color:var(--accent)}
+.ideal .tip{margin:0;font-size:13px;color:var(--muted)}
+.seg{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--paper)}
+.seg button{border:none;border-radius:0;background:transparent;color:var(--muted);padding:8px 14px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--paper)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.filters input[type=search]{flex:1 1 180px;min-width:0;font:15px var(--f-body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+table.umov{min-width:760px}
+table.umov td.cpt{white-space:normal;max-width:340px}
+table.umov tr.trf td{color:var(--muted)}
+.pos{color:var(--refund)} .neg{color:var(--pay)}
+.bk .v.pos{color:var(--refund)} .bk .v.neg{color:var(--pay)}
+table.accts input.alias{width:100%;min-width:140px}
+table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
+.filechip button{padding:0 4px;font-size:13px}
+.empty{color:var(--muted);font-size:15px;padding:14px;border:1.5px dashed var(--line);border-radius:10px;text-align:center}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow" id="eyebrow">Ejercicio 2026 · Comunidad de Madrid · renta que se presenta en 2027</span>
+    <h1 id="h1">Mi Renta 2026</h1>
+    <p class="lede">Nóminas en PDF y extractos de Ibercaja, Openbank y Trade Republic en una sola estimación. Todo se lee y se guarda en este navegador.</p>
+    <div class="toolbar"><button type="button" id="installBtn" class="primary" hidden>📲 Instalar como app</button></div>
+    <p class="note" id="installHelp" hidden></p>
+  </header>
+
+  <div class="yearbar">
+    <label for="userSel">Usuario <select id="userSel"></select></label>
+    <label for="yearSel">Ejercicio <select id="yearSel"></select></label>
+    <button id="saveYear" type="button" class="primary">Guardar año</button>
+    <button id="discard" type="button" hidden>Descartar cambios</button>
+    <span id="saveState" class="savestate" aria-live="polite"></span>
+    <div class="savedyears" id="savedYears"></div>
+    <details>
+      <summary>Usuarios</summary>
+      <p class="note">Cada usuario tiene sus propios años, nóminas, extractos e inversiones, guardados por separado en este navegador.</p>
+      <div class="toolbar" style="align-items:center">
+        <input type="text" id="userName" aria-label="Nombre del usuario actual" style="flex:1 1 160px;min-width:0">
+        <button id="userRename" type="button">Renombrar</button>
+      </div>
+      <div class="toolbar" style="align-items:center;margin-top:8px">
+        <input type="text" id="userNew2" placeholder="Nombre del nuevo usuario" aria-label="Nombre del nuevo usuario" style="flex:1 1 160px;min-width:0">
+        <button id="userNew" type="button" class="primary">+ Crear usuario</button>
+        <button id="userDel" type="button" class="danger">Borrar este usuario</button>
+      </div>
+      <p class="note" id="userMsg" aria-live="polite"></p>
+    </details>
+    <details>
+      <summary>Copia de seguridad</summary>
+      <p class="note">Los años guardados viven solo en este navegador. Si borras los datos del navegador o cambias de dispositivo, se pierden. Copia la copia de seguridad y pégala en un archivo de notas; para recuperarla, pégala aquí y pulsa «Restaurar».</p>
+      <div class="toolbar"><button id="bkCopy" type="button">Copiar copia de seguridad</button></div>
+      <textarea id="bkText" placeholder="Pega aquí una copia de seguridad para restaurarla" style="margin-top:8px"></textarea>
+      <div class="toolbar" style="margin-top:8px"><button id="bkRestore" type="button">Restaurar</button><span id="bkMsg" class="note" aria-live="polite"></span></div>
+    </details>
+  </div>
+
+  <div class="rbar" id="rbar">
+    <div class="rbar-in">
+      <span class="rbar-k" id="rbarK">Renta 2026</span>
+      <span class="rbar-v" id="rbarV">—</span>
+      <span class="rbar-s" id="rbarS"></span>
+      <button type="button" class="ghost rbar-go" data-tab="resumen">Ver resumen →</button>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Apartados de la renta">
+    <button type="button" role="tab" id="tabbtn-nom" aria-controls="tab-nom" data-tab="nominas">Nóminas<span class="cnt" id="cntNom"></span></button>
+    <button type="button" role="tab" id="tabbtn-ban" aria-controls="tab-ban" data-tab="bancos">Bancos<span class="cnt" id="cntBan"></span></button>
+    <button type="button" role="tab" id="tabbtn-inv" aria-controls="tab-inv" data-tab="inversiones">Inversiones<span class="cnt" id="cntInv"></span></button>
+    <button type="button" role="tab" id="tabbtn-plan" aria-controls="tab-plan" data-tab="plan">Plan de pensiones</button>
+    <button type="button" role="tab" id="tabbtn-inm" aria-controls="tab-inm" data-tab="inmuebles">Inmuebles<span class="cnt" id="cntInm"></span></button>
+    <button type="button" role="tab" id="tabbtn-pat" aria-controls="tab-pat" data-tab="patrimonio">Patrimonio</button>
+    <button type="button" role="tab" id="tabbtn-res" aria-controls="tab-res" data-tab="resumen">Resumen IRPF</button>
+  </div>
+
+  <div class="tabwrap">
+    <div id="tab-nom" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-nom">
+      <section class="panel" aria-labelledby="h-carga">
+        <div class="panel-head">
+          <h2 id="h-carga">Cargar nóminas</h2>
+          <span class="lock">🔒 Los PDF se leen en tu navegador. No se sube nada.</span>
+        </div>
+        <label class="drop" id="drop" tabindex="0">
+          <strong>Suelta aquí los PDF o pulsa para elegirlos</strong>
+          <span class="hint">Puedes cargar varios a la vez. Si un PDF está protegido con contraseña (suele ser tu DNI), te la pediré aquí mismo.</span>
+          <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+        </label>
+        <div id="queue" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-tabla">
+        <div class="panel-head">
+          <h2 id="h-tabla">Nóminas del año</h2>
+          <div class="toolbar">
+            <button id="addRow" type="button">+ Añadir a mano</button>
+            <button id="copyTsv" type="button">Copiar tabla</button>
+            <button id="clearAll" type="button" class="danger">Borrar todo</button>
+          </div>
+        </div>
+        <div id="exampleBanner" class="banner" hidden>
+          <span>Estas filas son <strong>datos de ejemplo</strong>. Desaparecen en cuanto cargues tu primera nómina.</span>
+        </div>
+        <div class="tablebox">
+          <table>
+            <thead><tr>
+              <th class="l">Mes</th><th class="l">Extra</th><th>Total devengado</th><th>S. Social trabajador</th><th>IRPF retenido</th><th>% IRPF</th><th>Líquido</th><th class="l">Estado</th><th></th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+            <tfoot id="tfoot"></tfoot>
+          </table>
+        </div>
+        <p class="note" id="copyMsg" aria-live="polite"></p>
+        <details>
+          <summary>Etiquetas que busco en el PDF</summary>
+          <p class="note">Si tu nómina usa otro nombre para algún total, añádelo arriba del todo (una etiqueta por línea) y pulsa «Volver a leer». Se busca sin distinguir mayúsculas ni tildes.</p>
+          <div class="labels">
+            <label class="field">Total devengado<textarea id="lab-dev"></textarea></label>
+            <label class="field">Seguridad Social del trabajador<textarea id="lab-ss"></textarea></label>
+            <label class="field">Retención IRPF<textarea id="lab-irpf"></textarea></label>
+            <label class="field">Líquido a percibir<textarea id="lab-liq"></textarea></label>
+          </div>
+          <div class="toolbar" style="margin-top:10px">
+            <button id="reparse" type="button" class="primary">Volver a leer los PDF</button>
+            <button id="resetLabels" type="button">Restaurar etiquetas</button>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="h-najust">
+        <div class="panel-head"><h2 id="h-najust">Ajustes de las nóminas</h2></div>
+        <label class="toggle"><input type="checkbox" id="proj" checked> Proyectar hasta diciembre con la media de tus nóminas</label>
+        <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+          <label class="field">Pagas extra por cobrar<input type="number" id="s-extraN" min="0" max="4" step="1"></label>
+          <label class="field">Importe de cada una (€)<input type="text" id="s-extraImp" inputmode="decimal" placeholder="media mensual"></label>
+          <label class="field">Devengos exentos incluidos en el total: dietas, cheque comida… (€)<input type="text" id="s-exentos" inputmode="decimal"></label>
+          <label class="field">Cuota sindical o colegio profesional obligatorio (€)<input type="text" id="s-otrosG" inputmode="decimal"></label>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-graf">
+        <div class="panel-head">
+          <h2 id="h-graf">Mes a mes</h2>
+          <div class="legend">
+            <span><i style="background:var(--neto)"></i>Neto</span>
+            <span><i style="background:var(--ss)"></i>Seguridad Social</span>
+            <span><i style="background:var(--irpf)"></i>IRPF</span>
+            <span><i style="background:var(--line)"></i>Proyectado</span>
+          </div>
+        </div>
+        <div class="chartbox"><svg id="chart" viewBox="0 0 660 240" role="img" aria-label="Devengado mensual desglosado en neto, Seguridad Social e IRPF"></svg></div>
+      </section>
+
+    </div>
+
+      <div id="tab-ban" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-ban" hidden>
+        <section class="panel" aria-labelledby="h-bcarga">
+          <div class="panel-head">
+            <h2 id="h-bcarga">Cargar extractos</h2>
+            <span class="lock">🔒 Se leen en tu navegador. No se sube nada.</span>
+          </div>
+          <label class="drop" id="bdrop" tabindex="0">
+            <strong>Suelta aquí los extractos o pulsa para elegirlos</strong>
+            <span class="hint">CSV, Excel (.xls, .xlsx) o PDF de Ibercaja, Openbank y Trade Republic. Puedes mezclar bancos. Solo se quedan las líneas con dividendos, intereses, retenciones, comisiones de custodia y ventas.</span>
+            <input type="file" id="bfile" accept=".csv,.xls,.xlsx,.pdf,.txt" multiple hidden>
+          </label>
+          <div class="filechips" id="bfiles"></div>
+          <p class="note" id="bstatus" aria-live="polite"></p>
+        </section>
+
+        <div class="seg" role="group" aria-label="Vista de Bancos">
+          <button type="button" data-bview-btn="fiscal" aria-pressed="true">Movimientos fiscales</button>
+          <button type="button" data-bview-btn="todos" aria-pressed="false">Todas las cuentas</button>
+        </div>
+
+        <section class="panel" data-bview="todos" aria-labelledby="h-ball" hidden>
+          <div class="panel-head"><h2 id="h-ball">Todas tus cuentas juntas</h2><span class="hint" id="ballHint"></span></div>
+          <div id="ballEmpty" class="empty">Sube los extractos de tus cuentas y aquí verás todos los movimientos juntos, ordenados por fecha y con el saldo total. Si ya los habías subido antes, vuelve a subirlos para leer también los movimientos que no son fiscales.</div>
+          <div id="ballBody" hidden>
+            <div class="bkgrid" id="ballTiles"></div>
+            <div class="chartbox" style="margin-top:14px"><svg id="ballChart" viewBox="0 0 660 210" role="img" aria-label="Evolución del saldo total de tus cuentas"></svg></div>
+            <div class="tablebox" style="margin-top:12px">
+              <table class="accts" style="min-width:540px"><thead><tr><th class="l">Cuenta</th><th class="l">Nombre</th><th>Movimientos</th><th>Último saldo</th><th class="l">Fecha</th></tr></thead><tbody id="ballAccts"></tbody></table>
+            </div>
+            <p class="note">Ponle nombre a cada cuenta («Nómina», «Ahorro»…). Si un mismo banco sale como dos cuentas, dales el mismo nombre y se unen.</p>
+          </div>
+        </section>
+
+        <section class="panel" data-bview="todos" aria-labelledby="h-ballmov" hidden>
+          <div class="panel-head"><h2 id="h-ballmov">Movimientos unificados</h2><span class="hint" id="ballCount"></span></div>
+          <div class="filters">
+            <select id="fAcct" aria-label="Cuenta"></select>
+            <select id="fScope" aria-label="Periodo"><option value="year">Solo 2026</option><option value="all">Todos los años</option></select>
+            <select id="fOrder" aria-label="Orden"><option value="desc">Más recientes primero</option><option value="asc">Más antiguos primero</option></select>
+            <input type="search" id="fText" placeholder="Buscar en el concepto" aria-label="Buscar en el concepto">
+            <label class="toggle"><input type="checkbox" id="fTr"> Ocultar traspasos entre tus cuentas</label>
+          </div>
+          <div class="tablebox">
+            <table class="umov"><thead><tr><th class="l">Fecha</th><th class="l">Cuenta</th><th class="l">Concepto</th><th>Importe</th><th>Saldo cuenta</th><th>Saldo total</th></tr></thead><tbody id="ubody"></tbody></table>
+          </div>
+          <div class="toolbar" style="margin-top:10px"><button type="button" id="uMore" hidden>Ver más</button></div>
+        </section>
+
+        <section class="panel" data-bview="fiscal" aria-labelledby="h-bmov">
+          <div class="panel-head">
+            <h2 id="h-bmov">Movimientos fiscales</h2>
+            <div class="toolbar">
+              <button id="bAdd" type="button">+ Añadir a mano</button>
+              <button id="bClear" type="button" class="danger">Borrar todo</button>
+            </div>
+          </div>
+          <div id="bExBanner" class="banner" hidden><span>Estas filas son <strong>datos de ejemplo</strong> y no cuentan en la estimación. Desaparecen en cuanto cargues tu primer extracto.</span></div>
+          <p class="note">La <strong>custodia o administración de valores</strong> sí se resta de dividendos e intereses; el <strong>mantenimiento de la cuenta</strong> no desgrava y aparece como «No deducible». <strong>Neto</strong>: el banco te ingresó el importe con el 19 % ya retenido. <strong>Bruto</strong>: la retención aparece en otra línea. Si un importe sale mal (por ejemplo, el saldo en vez del interés), pulsa <strong>⇄</strong> a su lado y elige la cifra correcta de esa línea. En dividendos extranjeros, apunta en «Ret. origen» lo que retuvo el otro país (por ejemplo, el 15 % de EE. UU.).</p>
+          <div class="tablebox">
+            <table class="bank">
+              <thead><tr><th class="l">✓</th><th class="l">Fecha</th><th class="l">Banco</th><th class="l">Concepto</th><th class="l">Tipo</th><th>Importe €</th><th class="l">Neto / bruto</th><th>Ret. origen €</th><th></th></tr></thead>
+              <tbody id="btbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel" data-bview="fiscal" aria-labelledby="h-bres">
+          <div class="panel-head">
+            <h2 id="h-bres">Resumen del ahorro</h2>
+            <span class="hint" id="bresHint">Pasa solo a la estimación</span>
+          </div>
+          <div class="bkgrid" id="bkgrid"></div>
+          <div class="tablebox" style="margin-top:14px">
+            <table style="min-width:360px"><thead><tr><th class="l">Banco</th><th>Bruto</th><th>Retenido</th></tr></thead><tbody id="bkBank"></tbody></table>
+          </div>
+          <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+            <label class="field">Otras ganancias o pérdidas por ventas en <span class="yr">2026</span>, si no las detallas en Inversiones (pérdida en negativo) (€)<input type="text" id="b-gp" inputmode="decimal"></label>
+            <label class="field">Pérdidas pendientes de años anteriores (<span class="yrRange">2022–2025</span>), como la del local (€)<input type="text" id="b-perdAnt" inputmode="decimal"></label>
+          </div>
+          <details>
+            <summary>Sin extractos: datos a mano</summary>
+            <p class="note">Solo se usan si no hay movimientos de banco en la tabla. Si solo sabes lo cobrado en neto: bruto = neto ÷ 0,81.</p>
+            <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+              <label class="field">Dividendos + intereses en BRUTO, menos custodia (€)<input type="text" id="s-ahorro" inputmode="decimal"></label>
+              <label class="field">Retenciones del 19 % ya practicadas (€)<input type="text" id="s-retAh" inputmode="decimal"></label>
+            </div>
+            <span class="hint" id="ahorroSrc" hidden>Ahora se calculan desde la tabla de movimientos.</span>
+          </details>
+          <p class="note">Las pérdidas se compensan con las ganancias del año y, si sobran, con hasta el 25 % de dividendos e intereses. La retención de origen se deduce por doble imposición hasta lo que pagarías en España por ese dividendo.</p>
+        </section>
+      </div>
+
+    <div id="tab-inv" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-inv" hidden>
+      <section class="panel" aria-labelledby="h-cart">
+        <div class="panel-head"><h2 id="h-cart">Cartera a 31 de diciembre de <span class="yr">2026</span></h2><button type="button" id="cartAdd" class="primary">+ Añadir</button></div>
+        <p class="note">Sirve para el patrimonio, no para la renta. Precio: para acciones y ETF, la cotización media del cuarto trimestre (o la del 31/12 si es más fácil); para cripto, el valor a 31/12; para un depósito, cantidad 1 y su saldo. Marca «Ext.» si la entidad es extranjera (por ejemplo, un exchange de cripto).</p>
+        <div class="tablebox"><table class="inv"><thead><tr><th class="l">Activo</th><th class="l">Tipo</th><th class="l">Entidad</th><th>Cantidad</th><th>Precio €</th><th>Valor €</th><th class="l">Ext.</th><th></th></tr></thead><tbody id="cartBody"></tbody></table></div>
+        <div class="bkgrid" id="cartTot"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-vent">
+        <div class="panel-head"><h2 id="h-vent">Ventas en <span class="yr">2026</span></h2><button type="button" id="ventAdd" class="primary">+ Añadir venta</button></div>
+        <p class="note">Esto sí va a la renta (base del ahorro). Pon lo que cobraste al vender, ya descontadas las comisiones, y lo que te costó comprar eso mismo, con comisiones. Si compraste en varias veces, se consideran vendidas primero las más antiguas (FIFO). Cambiar una cripto por otra también cuenta como venta. Con acciones, si recompras las mismas en los 2 meses siguientes a vender con pérdidas, esa pérdida se aplaza.</p>
+        <div class="tablebox"><table class="inv"><thead><tr><th class="l">Activo</th><th class="l">Tipo</th><th class="l">Fecha</th><th>Importe de venta €</th><th>Coste de compra €</th><th>Resultado €</th><th></th></tr></thead><tbody id="ventBody"></tbody></table></div>
+        <div class="ledger" id="ventTot" style="max-width:420px"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-stk">
+        <div class="panel-head"><h2 id="h-stk">Otros rendimientos de cripto</h2></div>
+        <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+          <label class="field">Recompensas de staking o lending cobradas en <span class="yr">2026</span>, en euros al recibirlas (€)<input type="text" id="s-staking" inputmode="decimal"></label>
+        </div>
+        <p class="note">Tributan como rendimientos del capital, igual que los intereses, y normalmente nadie te ha retenido nada. Los intereses del depósito ya entran desde la pestaña Bancos si subes su extracto.</p>
+      </section>
+    </div>
+
+    <div id="tab-plan" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-plan" hidden>
+      <section class="panel" aria-labelledby="h-plan">
+        <div class="panel-head"><h2 id="h-plan">Rescate del plan de pensiones</h2><span class="hint">Tributa como rendimiento del trabajo</span></div>
+        <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+          <label class="field">Valor actual (provisión matemática) (€)<input type="text" id="s-planVal" inputmode="decimal"><span class="hint" id="planRest">Se suma a tu patrimonio neto.</span></label>
+          <label class="field">Importe que rescatas en <span class="yr">2026</span> (€)<input type="text" id="s-resc" inputmode="decimal"></label>
+          <label class="field">De ese importe, parte de aportaciones hasta el 31/12/2006 cobrada como capital (€)<input type="text" id="s-resc40" inputmode="decimal"></label>
+          <label class="field">Retención que te practica la entidad (€)<input type="text" id="s-retResc" inputmode="decimal"></label>
+        </div>
+        <p class="note">La parte de aportaciones hasta 2006 cobrada de una vez tiene una reducción del 40 %. El certificado de la gestora te dice cuánto es.</p>
+      </section>
+      <section class="panel" aria-labelledby="h-ideal">
+        <div class="panel-head"><h2 id="h-ideal">¿Cuánto puedo rescatar sin que me cueste?</h2><span class="hint">Con tus nóminas, bancos e inversiones de <span class="yr">2026</span></span></div>
+        <div class="bkgrid ideal" id="idealTiles"></div>
+        <p class="note" id="idealNote"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-resc">
+        <div class="panel-head">
+          <h2 id="h-resc">¿Cuánto me cuesta rescatar el plan?</h2>
+          <span class="hint">Con tus nóminas y tu ahorro de <span class="yr">2026</span></span>
+        </div>
+        <p id="rescMine" class="banner" hidden></p>
+        <div class="tablebox">
+          <table class="resc">
+            <thead><tr><th class="l">Rescate</th><th>IRPF extra</th><th>Tipo medio</th><th>Tipo del tramo</th><th>Te queda</th></tr></thead>
+            <tbody id="rescBody"></tbody>
+          </table>
+        </div>
+        <p class="note">«Tipo del tramo» es lo que pagas por cada euro rescatado dentro de ese tramo. El rescate se suma a la nómina como rendimiento del trabajo, así que conviene repartirlo en varios años para quedarte en los tramos bajos. Pon tu importe en «Ajustes de la estimación» para ver el efecto en el resultado.</p>
+      </section>
+    </div>
+
+    <div id="tab-inm" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-inm" hidden>
+      <section class="panel" aria-labelledby="h-inm">
+        <div class="panel-head">
+          <h2 id="h-inm">Inmuebles alquilados</h2>
+          <button type="button" id="inmAdd" class="primary">+ Añadir inmueble</button>
+        </div>
+        <div id="inmList" class="inmlist"></div>
+        <div class="ledger" id="inmTot" style="margin-top:12px"></div>
+        <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %.</p>
+      </section>
+    </div>
+
+    <div id="tab-pat" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-pat" hidden>
+      <section class="panel" aria-labelledby="h-patcarga">
+        <div class="panel-head"><h2 id="h-patcarga">Extractos de patrimonio</h2><span class="lock">🔒 Se leen en tu navegador. No se sube nada.</span></div>
+        <label class="drop" id="pdrop" tabindex="0">
+          <strong>Suelta aquí el extracto de patrimonio en PDF o pulsa para elegirlo</strong>
+          <span class="hint">Por ejemplo, el «Extracto del patrimonio neto» de Trade Republic. Las acciones y las criptomonedas pasan a Inversiones y el efectivo a tus cuentas. Uno más reciente de la misma entidad sustituye al anterior; los de otras entidades se suman.</span>
+          <input type="file" id="pfile" accept=".pdf,application/pdf" multiple hidden>
+        </label>
+        <p class="note" id="pstatus" aria-live="polite"></p>
+        <div class="tablebox"><table style="min-width:540px"><thead><tr><th class="l">Entidad</th><th class="l">Fecha</th><th>Posiciones</th><th>Efectivo €</th><th>Total €</th><th></th></tr></thead><tbody id="pdocs"></tbody></table></div>
+        <p class="paramnote" id="pdocNote" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-pat">
+        <div class="panel-head"><h2 id="h-pat">Tu patrimonio a 31/12/<span class="yr">2026</span></h2><span class="hint">Lo que tienes, no lo que ganas: no cambia la renta</span></div>
+        <div class="patgrid">
+          <div class="rescol">
+            <div class="result neutral"><span class="k">Patrimonio neto</span><span class="v" id="patNeto">—</span><span class="s" id="patSub"></span></div>
+            <div><div class="euro" id="patBar"></div><div class="legend" id="patLeg"></div></div>
+          </div>
+          <div class="tablebox"><table class="pat" style="min-width:420px"><thead><tr><th class="l">Bloque</th><th class="l">De dónde sale</th><th>Valor €</th></tr></thead><tbody id="patBody"></tbody></table></div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="h-patd">
+        <div class="panel-head"><h2 id="h-patd">Datos que no salen de otras pestañas</h2></div>
+        <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+          <label class="field">Saldo de tus cuentas a 31/12 (€)<input type="text" id="p-cuentas" inputmode="decimal"><span class="hint" id="pCuentasHint"></span></label>
+          <label class="field">Valor de tu vivienda habitual, tu parte (€)<input type="text" id="p-vivienda" inputmode="decimal"><span class="hint">El mayor entre valor catastral, valor de referencia y precio de compra. Exenta hasta 300.000 €.</span></label>
+          <label class="field">Plan de pensiones: valor actual (provisión matemática) (€)<input type="text" id="p-plan" inputmode="decimal"><span class="hint">Es el mismo dato que en la pestaña Plan de pensiones.</span></label>
+          <label class="field">Otros bienes: coche, joyas, préstamos que te deban… (€)<input type="text" id="p-otros" inputmode="decimal"></label>
+          <label class="field">Deudas pendientes a 31/12: hipoteca, préstamos (€)<input type="text" id="p-deudas" inputmode="decimal"></label>
+          <label class="field">Saldo en cuentas de bancos extranjeros (€)<input type="text" id="p-extc" inputmode="decimal"><span class="hint">Solo para comprobar el Modelo 720.</span></label>
+          <label class="field">Donaciones recibidas en <span class="yr">2026</span> (€)<input type="text" id="p-donac" inputmode="decimal"><span class="hint">Solo informativo: ya están dentro de tus cuentas.</span></label>
+        </div>
+        <p class="note">Para inmuebles alquilados, el valor se pone en la pestaña Inmuebles. Los saldos bancarios cuentan por el mayor entre el saldo a 31/12 y el saldo medio del último trimestre.</p>
+      </section>
+      <section class="panel" aria-labelledby="h-patc">
+        <div class="panel-head"><h2 id="h-patc">Qué tienes que presentar</h2></div>
+        <ul class="checks" id="patChecks"></ul>
+      </section>
+    </div>
+
+    <div id="tab-res" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-res" hidden>
+      <section class="panel" aria-labelledby="h-renta">
+        <div class="panel-head"><h2 id="h-renta">Estimación Renta 2026</h2></div>
+        <p class="paramnote" id="paramNote" hidden></p>
+        <div class="resgrid">
+          <div class="rescol">
+            <div id="result" class="result"></div>
+            <div class="rates">
+              <div class="rate"><div class="k">Tipo medio retenido</div><div class="v" id="rRet">—</div></div>
+              <div class="rate"><div class="k">Tipo efectivo real</div><div class="v" id="rEf">—</div></div>
+            </div>
+            <div>
+              <div class="sec-mini">Dónde va lo que ingresas</div>
+              <div class="euro" id="euro"></div>
+              <div class="legend" id="euroLeg"></div>
+            </div>
+          </div>
+          <div class="ledger" id="ledger"></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-cmp">
+        <div class="panel-head"><h2 id="h-cmp">Comparación entre años</h2><span class="hint">Años guardados y el que tienes abierto</span></div>
+        <div class="tablebox"><table style="min-width:720px"><thead><tr><th class="l">Año</th><th>Trabajo</th><th>Inmuebles</th><th>Ahorro</th><th>Cuota líquida</th><th>Retenciones</th><th>Resultado</th><th>Patrimonio neto</th></tr></thead><tbody id="cmpBody"></tbody></table></div>
+      </section>
+
+      <section class="panel">
+        <details>
+          <summary>Datos personales y mínimos</summary>
+          <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+            <label class="field">Mínimo personal estatal (€)<input type="text" id="s-minE" inputmode="decimal"></label>
+            <label class="field">Mínimo personal Madrid (€)<input type="text" id="s-minA" inputmode="decimal"></label>
+          </div>
+          <p class="note">Por defecto, contribuyente sin hijos y menor de 65 años. Súmales los mínimos por descendientes, edad o discapacidad si te corresponden.</p>
+        </details>
+        <details>
+          <summary>Qué tiene en cuenta el cálculo</summary>
+          <div class="note">
+            <p>Escala estatal 2026 (9,5 % a 24,5 %) y escala autonómica de Madrid (8,5 % a 20,5 %). Gastos deducibles del trabajo: Seguridad Social más 2.000 € de otros gastos. Reducción por rendimientos del trabajo (art. 20 LIRPF) y deducción para salarios bajos de hasta 590,89 €. Base del ahorro del 19 % al 30 %, con compensación de pérdidas y deducción por doble imposición internacional.</p>
+            <p>No incluye deducciones autonómicas (alquiler, hijos, gastos educativos), aportaciones a planes de pensiones, vivienda habitual anterior a 2013 ni rendimientos en especie. Es una estimación: el dato que manda es el borrador de la Agencia Tributaria.</p>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- Lector de nóminas (independiente de la página) ----------
+// Entrada: líneas del PDF, cada una como lista de fragmentos [x, ancho, texto].
+window.NominaParser = (() => {
+  const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/\s+/g," ");
+  const AMT_ES = /-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}(?!\d)(?!\s*%)/g;
+  const AMT_EN = /-?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}(?!\d)(?!\s*%)/g;
+  const MN = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const MONTH_RE = /(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s*(?:de\s*|del\s*)?(2\.?0\d{2})?/;
+  const mIdx = w => w==="setiembre" ? 8 : MN.indexOf(w);
+  const yr = s => s ? +String(s).replace(".","") : null;
+
+  const text = lines => lines.map(items => items.map(i=>i[2]).join("  ")).join("\n");
+  const build = lines => lines.map(items => {
+    let t = ""; const segs = [];
+    for (const [x,w,s] of items){ const n = norm(String(s)).trim(); if (!n) continue; if (t) t += "  "; segs.push({a:t.length, b:t.length+n.length, x:+x||0, w:+w||0, s:n}); t += n; }
+    return {t, segs};
+  });
+
+  function detectMonth(L, fname){
+    const all = L.map(l=>l.t).join(" ");
+    let m = all.match(/\b\d{1,2}\s*(?:de\s*)?(\d{1,2})\s*al\s*\d{1,2}\s*(?:de\s*)?(\d{1,2})\s*(?:de\s*)?(2\.?0\d{2})/);
+    if (m && +m[2]>=1 && +m[2]<=12) return {mes:+m[2]-1, year:yr(m[3])};
+    const per = L.findIndex(l => /periodo|liquidacion|mes de/.test(l.t));
+    if (per>=0){
+      const seg = L.slice(per, per+2).map(l=>l.t).join(" ");
+      m = seg.match(MONTH_RE); if (m) return {mes:mIdx(m[1]), year:yr(m[2])};
+      const d = seg.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})\b/); if (d && +d[2]>=1 && +d[2]<=12) return {mes:+d[2]-1, year:d[3].length===2?2000+ +d[3]:+d[3]};
+      const ab = seg.match(/\b(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)\b[\s\-\/.]*(?:20)?(2[4-9])\b/);
+      if (ab){ const i=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(ab[1]==="set"?"sep":ab[1]); return {mes:i, year:2000+ +ab[2]}; }
+    }
+    m = all.match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s*(?:de\s*|del\s*)?(2\.?0\d{2})/);
+    if (m) return {mes:mIdx(m[1]), year:yr(m[2])};
+    const counts = {};
+    for (const d of all.matchAll(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](20\d{2})\b/g)) if (+d[2]>=1 && +d[2]<=12 && +d[3]>=2025) counts[+d[2]-1] = (counts[+d[2]-1]||0)+1;
+    const best = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]; if (best) return {mes:+best[0], year:null};
+    const f = norm(fname||"");
+    const fm = f.match(MONTH_RE); if (fm) return {mes:mIdx(fm[1]), year:null};
+    const fn = f.match(/(20\d{2})[\-_ .]?(0[1-9]|1[0-2])(?!\d)/) || f.match(/(?<!\d)(0[1-9]|1[0-2])[\-_ .](20\d{2})/);
+    if (fn) return {mes:(fn[1].startsWith("20")? +fn[2] : +fn[1])-1, year:null};
+    return {mes:null, year:null};
+  }
+
+  function parse(rawLines, fname, labels){
+    const L = build(rawLines);
+    const all = L.map(l=>l.t).join("\n");
+    const RE = (all.match(AMT_ES)||[]).length >= (all.match(AMT_EN)||[]).length ? AMT_ES : AMT_EN;
+    const toNum = s => RE===AMT_ES ? parseFloat(s.replace(/\./g,"").replace(",",".")) : parseFloat(s.replace(/,/g,""));
+    const amounts = s => [...s.matchAll(RE)].map(m=>toNum(m[0]));
+
+    // Columna que ocupa una etiqueta dentro de su línea
+    const colOf = (line, k, len) => {
+      const segs = line.segs.filter(s => s.b>k && s.a<k+len);
+      if (!segs.length) return null;
+      const x0 = Math.min(...segs.map(s=>s.x)), x1 = Math.max(...segs.map(s=>s.x+s.w));
+      return {x0, x1, c:(x0+x1)/2, pos: x1>0};
+    };
+    // Cifra en las filas de debajo, en la misma columna que la etiqueta
+    const below = (i, col) => {
+      for (let j=i+1; j<Math.min(L.length, i+4); j++){
+        const ln = L[j]; if (!ln.t) continue;
+        if (/[a-z]{4,}/.test(ln.t)) return null;
+        const cands = ln.segs.map(s => ({s, a:amounts(s.s)})).filter(o => o.a.length);
+        if (!cands.length) continue;
+        if (!col || !col.pos) return cands[0].a[0];
+        let best = null, bd = Infinity;
+        for (const o of cands){
+          const r = o.s.x + o.s.w, c = o.s.x + o.s.w/2;
+          const d = Math.min(Math.abs(c-col.c), Math.abs(r-col.x1));
+          if (d < bd){ bd = d; best = o; }
+        }
+        return best && bd < 80 ? best.a[0] : null;
+      }
+      return null;
+    };
+    const find = (labs, mode, maxIdx, skip) => {
+      for (const lab of labs){
+        const Ln = norm(lab).trim(); if (!Ln) continue;
+        for (let i=0; i<Math.min(L.length, maxIdx); i++){
+          const t = L[i].t; const k = t.indexOf(Ln); if (k<0) continue;
+          if (skip && skip.test(t)) continue;
+          const a = amounts(t.slice(k+Ln.length));
+          if (a.length) return mode==="last" ? a[a.length-1] : a[0];
+          const v = below(i, colOf(L[i], k, Ln.length)); if (v!=null) return v;
+        }
+      }
+      return null;
+    };
+
+    let anchor = L.findIndex(l => /total a deducir|total deducciones|total desc/.test(l.t));
+    if (anchor<0) anchor = L.findIndex(l => /liquido/.test(l.t));
+    const maxDed = anchor>=0 ? anchor+2 : L.length;
+
+    const dev  = find(labels.dev, "first", L.length);
+    const ded  = find(["total a deducir","total deducciones","total descuentos","total desc"], "first", L.length);
+    const liq  = find(labels.liq, "first", L.length);
+    const irpf = find(labels.irpf, "last", maxDed, /base sujeta|base de retencion|base irpf/);
+    let ss = find(labels.ss, "first", maxDed, /empresa|\bemp\b/);
+    let ssFrom = ss!=null ? "total" : null;
+    if (ss==null){
+      // Suma de las líneas de cotización del trabajador: contingencias comunes, desempleo, formación profesional, MEI
+      const COMP = /cont(?:ingencias|\.)?\s*comunes|c\.\s*comunes|desemp|formacion profesional|\bf\.\s?p\.?(?!\w)|_fp\b|\bmei\b|equidad intergeneracional/;
+      const EXC = /empresa|\bemp\b|ap\.?\s*emp|base|coste|bonif/;
+      let sum = 0, hit = 0;
+      for (let i=0; i<Math.min(L.length, maxDed); i++){
+        const t = L[i].t; if (!COMP.test(t) || EXC.test(t)) continue;
+        const a = amounts(t); if (a.length){ sum += a[a.length-1]; hit++; }
+      }
+      if (hit){ ss = Math.round(sum*100)/100; ssFrom = hit+" líneas"; }
+    }
+    const {mes, year} = detectMonth(L, fname);
+    const extra = L.some(l => /paga (extra|extraordinaria|de verano|de navidad|de beneficios)|p\.? ?extra\b|gratificacion extraordinaria/.test(l.t) && !/prorrat/.test(l.t));
+
+    let status = "ok"; const notes = [];
+    if (!rawLines.length){ status="rev"; notes.push("PDF sin texto (¿escaneado?)"); }
+    if ([dev,ss,irpf].some(v=>v==null)){ status="rev"; notes.push("faltan datos"); }
+    if (dev && ss!=null && ss > dev*0.15){ status="rev"; notes.push("S. Social parece alta"); }
+    if (dev && liq!=null && ded!=null && Math.abs(dev-ded-liq) > 0.05){ status="rev"; notes.push("no cuadra"); }
+    if (dev && liq!=null && ss!=null && irpf!=null && ss+irpf > dev-liq+0.05){ status="rev"; notes.push("descuentos > devengado − líquido"); }
+    if (mes==null) notes.push("mes no detectado");
+    const want = labels.year || 2026;
+    if (year && year!==want){ status="rev"; notes.push("año "+year); }
+    return {dev, ss, irpf, liq, ded, ssFrom, mes, extra, status, note:notes.join(" · ")};
+  }
+  return { parse, text, norm };
+})();
+</script>
+<script>
+(() => {
+"use strict";
+// ---------- Parámetros fiscales 2026 ----------
+const P = {
+  estatal: [[12450,.095],[20200,.12],[35200,.15],[60000,.185],[300000,.225],[Infinity,.245]],
+  madrid:  [[13362.22,.085],[19004.63,.107],[35425.68,.128],[57320.40,.174],[Infinity,.205]],
+  ahorro:  [[6000,.19],[50000,.21],[200000,.23],[300000,.27],[Infinity,.30]],
+  otrosGastos: 2000, smi: 17094, dedSmi: 590.89, dedSmiTope: 20048.45, minE: 5550, minA: 5956.65
+};
+const escala = (x, tr) => { let t=0, prev=0; for (const [lim,r] of tr){ if (x<=prev) break; t += (Math.min(x,lim)-prev)*r; prev=lim; } return t; };
+const reduccionTrabajo = rn => rn<=14852 ? 7302 : rn<=17673.52 ? 7302-1.75*(rn-14852) : rn<=19747.5 ? 2364.34-1.14*(rn-17673.52) : 0;
+
+// ---------- Formato español ----------
+const fmt = (n, dec=2) => {
+  if (n==null || !isFinite(n)) return "—";
+  const neg = n<0; const [i,d] = Math.abs(n).toFixed(dec).split(".");
+  return (neg?"-":"") + i.replace(/\B(?=(\d{3})+(?!\d))/g,".") + (dec?","+d:"");
+};
+const eur = n => fmt(n)+" €";
+const pct = n => isFinite(n) ? fmt(n*100,2)+" %" : "—";
+const parseEs = s => {
+  if (s==null) return null; s = String(s).trim().replace(/[€\s]/g,""); if (!s) return null;
+  if (s.includes(",")) s = s.replace(/\./g,"").replace(",",".");
+  else if ((s.match(/\./g)||[]).length>1 || /^\d{1,3}\.\d{3}$/.test(s)) s = s.replace(/\./g,"");
+  const n = parseFloat(s); return isFinite(n) ? n : null;
+};
+const esc = s => String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+// ---------- Estado ----------
+const DEFAULT_LABELS = {
+  dev: ["total devengado","total devengos","total bruto","total percepciones","importe bruto"],
+  ss:  ["total aportaciones","descuentos a cargo del trabajador","cotizaciones a la seguridad social","total cotizaciones","total seguridad social","total s.s.","cuota obrera"],
+  irpf:["retencion irpf","retencion i.r.p.f","tributacion irpf","tributacion i.r.p.f","impuesto sobre la renta","i.r.p.f","irpf"],
+  liq: ["liquido total a percibir","liquido a percibir","total liquido","liquido total","neto a percibir","total a percibir","liquido"]
+};
+const DEFAULT_SETTINGS = { proj:true, extraN:0, extraImp:null, exentos:0, otrosG:0, ahorro:0, retAh:0, gp:0, perdAnt:0, resc:0, resc40:0, retResc:0, minE:P.minE, minA:P.minA };
+let state = { rows:[], settings:{...DEFAULT_SETTINGS}, labels:JSON.parse(JSON.stringify(DEFAULT_LABELS)), bank:{rows:[], files:[], all:[], alias:{}} };
+let openRaw = new Set();
+let curYear = 2026;
+
+// ---------- Almacén local por ejercicio ----------
+// saved: lo que guardas con «Guardar año». drafts: cambios posteriores, conservados automáticamente hasta que guardes o descartes.
+// Usuarios: cada uno con su propio almacén de años
+const KU = "miRenta:users", ukey = id => "miRenta:v1:" + id;
+let users = { list:[{id:"u1", name:"Usuario 1"}], cur:"u1" };
+const saveUsers = () => { try { localStorage.setItem(KU, JSON.stringify(users)); } catch(e){} };
+(() => {
+  let u = null; try { u = JSON.parse(localStorage.getItem(KU)||"null"); } catch(e){}
+  if (u && Array.isArray(u.list) && u.list.length) users = u;
+  else { try { const old = localStorage.getItem("miRenta:v1"); if (old) localStorage.setItem(ukey("u1"), old); } catch(e){} saveUsers(); }
+  if (!users.list.some(x => x.id===users.cur)) users.cur = users.list[0].id;
+})();
+let KS = ukey(users.cur);
+let store = { saved:{}, drafts:{}, last:2026 };
+let storageOk = true;
+const readStore = () => { store = { saved:{}, drafts:{}, last:2026 }; try { const s = JSON.parse(localStorage.getItem(KS)||"null"); if (s) store = { saved:{}, drafts:{}, last:2026, ...s }; } catch(e){ storageOk = false; } };
+const writeStore = () => { try { localStorage.setItem(KS, JSON.stringify(store)); storageOk = true; return true; } catch(e){ storageOk = false; return false; } };
+const snapshot = () => JSON.parse(JSON.stringify({ rows:state.rows.filter(r=>!r.example), settings:state.settings, labels:state.labels,
+  bank:{ rows:state.bank.rows.filter(r=>!r.example), files:state.bank.files, all:state.bank.all||[], alias:state.bank.alias||{} } }));
+const save = () => { store.drafts[curYear] = { data:snapshot(), at:Date.now() }; writeStore(); renderSaveState(); };
+const applyData = d => {
+  state.rows = d?.rows || [];
+  state.settings = { ...DEFAULT_SETTINGS, ...(d?.settings||{}) };
+  state.labels = { ...JSON.parse(JSON.stringify(DEFAULT_LABELS)), ...(d?.labels||{}) };
+  state.bank = { rows: d?.bank?.rows || [], files: d?.bank?.files || [], all: d?.bank?.all || [], alias: d?.bank?.alias || {} };
+  normInm();
+};
+const loadYear = y => { curYear = y; store.last = y; const e = store.drafts[y] || store.saved[y]; applyData(e?.data); openRaw.clear(); writeStore(); };
+const load = () => {
+  readStore();
+  // Migración: nóminas guardadas por la versión anterior de esta página
+  if (users.cur==="u1" && !store.saved[2026] && !store.drafts[2026]){
+    try { const old = JSON.parse(localStorage.getItem("misNominas2026")||"null"); if (old && (old.rows||[]).length) store.saved[2026] = { data:{...old, bank:{rows:[],files:[]}}, at:Date.now() }; } catch(e){}
+  }
+  loadYear(+store.last || 2026);
+};
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+const exampleRows = () => [0,1,2].map(m => ({ id:uid(), example:true, mes:m, extra:false, file:"ejemplo", dev:2650, ss:200.96, irpf:397.50, liq:2051.54, status:"ej", text:"" }));
+
+// ---------- Lectura de PDF ----------
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+async function pdfLines(buf, password){
+  const pdf = await pdfjsLib.getDocument({ data: buf.slice(0), password }).promise;
+  const out = [];
+  for (let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p); const tc = await page.getTextContent();
+    const rows = [];
+    for (const it of tc.items){
+      if (!it.str || !it.str.trim()) continue;
+      const x = it.transform[4], y = it.transform[5];
+      let r = rows.find(r => Math.abs(r.y-y) < 3);
+      if (!r){ r = {y, items:[]}; rows.push(r); }
+      r.items.push([Math.round(x*10)/10, Math.round((it.width||0)*10)/10, it.str]);
+    }
+    rows.sort((a,b)=>b.y-a.y);
+    for (const r of rows){ r.items.sort((a,b)=>a[0]-b[0]); out.push(r.items); }
+  }
+  return out;
+}
+const rowLines = r => r.lines || (r.text ? r.text.split("\n").map(t=>[[0,0,t]]) : null);
+const parseRow = (lines, name) => NominaParser.parse(lines, name, {...state.labels, year:curYear});
+
+// ---------- Cola de archivos ----------
+const queueEl = document.getElementById("queue");
+async function handleFiles(files){
+  for (const f of files){
+    if (!/\.pdf$/i.test(f.name) && f.type!=="application/pdf") continue;
+    const buf = await f.arrayBuffer();
+    await tryOpen(f.name, buf);
+  }
+}
+async function tryOpen(name, buf, password){
+  const item = document.createElement("div"); item.className="qitem"; item.textContent = "Leyendo "+name+"…"; queueEl.appendChild(item);
+  try {
+    if (!window.pdfjsLib) throw new Error("nolib");
+    const raw = await pdfLines(buf, password);
+    item.remove(); addParsed(name, raw);
+  } catch(err){
+    if (err && err.name==="PasswordException"){
+      const wrong = err.code===2;
+      item.innerHTML = `<span><strong>${esc(name)}</strong> ${wrong?"— contraseña incorrecta.":"está protegido."} Contraseña:</span>`;
+      const inp = document.createElement("input"); inp.type="password"; inp.id="pw-"+uid(); inp.setAttribute("aria-label","Contraseña de "+name);
+      const b = document.createElement("button"); b.type="button"; b.className="primary"; b.textContent="Abrir";
+      const go = () => { const pw = inp.value; item.remove(); tryOpen(name, buf, pw); };
+      b.onclick = go; inp.onkeydown = e => { if (e.key==="Enter"){ e.preventDefault(); go(); } };
+      item.append(inp, b); inp.focus();
+    } else {
+      item.innerHTML = `<span><strong>${esc(name)}</strong>: no he podido leerlo${err&&err.message==="nolib"?" (el lector de PDF no ha cargado; recarga la página)":""}. Puedes añadir sus datos a mano.</span>`;
+      const b = document.createElement("button"); b.type="button"; b.className="ghost"; b.textContent="Cerrar"; b.onclick=()=>item.remove(); item.append(b);
+    }
+  }
+}
+function addParsed(name, raw){
+  state.rows = state.rows.filter(r => !r.example);
+  const parsed = parseRow(raw, name);
+  const existing = state.rows.find(r => r.file===name);
+  const row = { id: existing?existing.id:uid(), file:name, lines:raw, ...parsed };
+  if (existing) Object.assign(existing, row); else state.rows.push(row);
+  sortRows(); save(); render();
+}
+const sortRows = () => state.rows.sort((a,b)=>(a.mes??99)-(b.mes??99) || (a.extra?1:0)-(b.extra?1:0));
+
+// ---------- Cálculos ----------
+function compute(over={}){
+  const rows = state.rows, s = {...state.settings, ...over};
+  const sum = k => rows.reduce((t,r)=>t+(r[k]||0),0);
+  const real = { dev:sum("dev"), ss:sum("ss"), irpf:sum("irpf"), liq:sum("liq") };
+  const ord = rows.filter(r=>!r.extra && r.dev);
+  const base = ord.length ? ord : rows.filter(r=>r.dev);
+  const nMeses = new Set(base.map(r=>r.mes ?? ("x"+r.id))).size;
+  const avg = k => nMeses ? base.reduce((t,r)=>t+(r[k]||0),0)/nMeses : 0;
+  const monthsCovered = new Set(rows.filter(r=>!r.extra || r.mes==null).map(r=>r.mes ?? ("x"+r.id))).size;
+  const remaining = Math.max(0, 12 - monthsCovered);
+  const tipoMedioIrpf = avg("dev") ? avg("irpf")/avg("dev") : 0;
+  const extraImp = s.extraImp!=null ? s.extraImp : avg("dev");
+  const proj = { meses: s.proj?remaining:0, extras: s.proj?(s.extraN||0):0 };
+  proj.dev = proj.meses*avg("dev") + proj.extras*extraImp;
+  proj.ss = proj.meses*avg("ss");
+  proj.irpf = proj.meses*avg("irpf") + proj.extras*extraImp*tipoMedioIrpf;
+  const projMonths = [];
+  if (s.proj){ const used = new Set(rows.map(r=>r.mes)); for (let m=0; m<12 && projMonths.length<remaining; m++) if (!used.has(m)) projMonths.push(m); }
+
+  // Trabajo: nómina + rescate del plan de pensiones
+  const RIsal = Math.max(0, real.dev + proj.dev - (s.exentos||0));
+  const resc = Math.max(0, s.resc||0);
+  const rescRed = Math.min(resc, Math.max(0, s.resc40||0)) * 0.4;
+  const RI = RIsal + resc;
+  const RIcomp = RI - rescRed;
+  const SS = real.ss + proj.ss;
+  const RET = real.irpf + proj.irpf;
+  const retResc = Math.max(0, s.retResc||0);
+
+  // Ahorro: rendimientos del capital (dividendos, intereses) y ganancias/pérdidas por ventas
+  const bk = bankTotals(false);
+  const ventasInv = (s.ventas||[]).reduce((t,v) => t + ((v.venta||0) - (v.coste||0)), 0);
+  const staking = Math.max(0, s.staking||0);
+  const rcm0 = (bk ? bk.rcm : (s.ahorro||0)) + staking, gp0 = (s.gp||0) + (bk ? bk.ventas : 0) + ventasInv;
+  let rcm = rcm0, gp = gp0, cross = 0;
+  if (rcm<0 && gp>0){ const c = Math.min(-rcm, gp*0.25); rcm += c; gp -= c; }
+  if (gp<0 && rcm>0){ cross = Math.min(-gp, rcm*0.25); gp += cross; rcm -= cross; }
+  let pend = Math.max(0, s.perdAnt||0), compGP = 0, compRCM = 0;
+  if (gp>0){ compGP = Math.min(pend, gp); gp -= compGP; pend -= compGP; }
+  if (rcm>0){ compRCM = Math.min(pend, rcm, Math.max(0, Math.max(0,rcm0)*0.25 - cross)); rcm -= compRCM; pend -= compRCM; }
+  const pendFut = pend + Math.max(0,-gp) + Math.max(0,-rcm);
+
+  // Inmuebles alquilados (base general): cada uno con sus gastos, su % de propiedad y su reducción
+  const inms = (s.inmuebles||[]).map(m => {
+    const p = (m.pct==null ? 100 : m.pct)/100;
+    const ing = Math.max(0, m.ing||0);
+    const intRep = Math.min(Math.max(0, m.intRep||0), ing);
+    const gastos = Math.max(0, m.gastos||0), amort = Math.max(0, m.vc||0)*0.03;
+    const neto = ing ? (ing - intRep - gastos - amort)*p : 0;
+    const redPct = parseFloat(m.red ?? "0.5") || 0;
+    const red = neto>0 ? neto*redPct : 0;
+    return { id:m.id, nombre:m.nombre||"Inmueble", ing:ing*p, intRep:intRep*p, gastos:gastos*p, amort:amort*p, neto, redPct, red, netoRed:neto-red };
+  });
+  const tot = k => inms.reduce((t,m)=>t+m[k],0);
+  const alqIng = tot("ing"), alqNeto = tot("neto"), alqRed = tot("red"), alqNetoRed = tot("netoRed");
+
+  const otrasRentas = Math.max(0,rcm0) + Math.max(0,gp0) + Math.max(0,alqNeto);
+
+  const gastos = Math.min(RIcomp, SS + (s.otrosG||0));
+  const otros2000 = Math.min(P.otrosGastos, Math.max(0, RIcomp - gastos));
+  const RN = Math.max(0, RIcomp - gastos - otros2000);
+  const red = otrasRentas>6500 ? 0 : Math.min(RN, reduccionTrabajo(RN));
+  const trabNeto = Math.max(0, RN - red);
+  const BLG = Math.max(0, trabNeto + alqNetoRed);
+  const BA = Math.max(0,rcm) + Math.max(0,gp);
+  const cuota = (escalaGen, minimo) => {
+    const mg = Math.min(minimo, BLG), ma = Math.min(minimo-mg, BA);
+    const half = x => escala(x, P.ahorro)/2;
+    return Math.max(0, escala(BLG,escalaGen) - escala(mg,escalaGen)) + Math.max(0, half(BA) - half(ma));
+  };
+  const cE = cuota(P.estatal, s.minE ?? P.minE);
+  const cA = cuota(P.madrid, s.minA ?? P.minA);
+  const cuotaInt = cE + cA;
+  let dedSmi = 0;
+  if (RIsal>0 && RIsal<=P.dedSmiTope && otrasRentas<=6500){
+    dedSmi = RIsal<=P.smi ? P.dedSmi : P.dedSmi - 0.2*(RIsal-P.smi);
+    const totalBases = trabNeto + Math.max(0,alqNetoRed) + BA;
+    const parteTrabajo = totalBases ? cuotaInt*trabNeto/totalBases*(RIcomp ? RIsal/RIcomp : 1) : 0;
+    dedSmi = Math.max(0, Math.min(dedSmi, parteTrabajo));
+  }
+  // Doble imposición internacional: lo retenido en origen, hasta lo que pagarías en España por esos dividendos
+  const tmA = BA ? escala(BA, P.ahorro)/BA : P.ahorro[0][1];
+  const dedDI = bk ? Math.max(0, Math.min(bk.foreignRet, bk.foreignGross*tmA, cuotaInt - dedSmi)) : 0;
+  const CL = Math.max(0, cuotaInt - dedSmi - dedDI);
+  const retAh = bk ? bk.ret : (s.retAh||0);
+  const resultado = CL - RET - retAh - retResc;
+  return { real, proj, projMonths, avg:{dev:avg("dev"),ss:avg("ss"),irpf:avg("irpf")}, tipoMedioIrpf, extraImp,
+    RIsal, resc, rescRed, RI, RIcomp, SS, gastos, otros2000, RN, red, trabNeto, BLG, BA, otrasRentas,
+    inms, alqIng, alqNeto, alqRed, alqNetoRed, rcm0, gp0, cross, compGP, compRCM, pendFut,
+    cE, cA, cuotaInt, dedSmi, dedDI, bk, ventasInv, staking, CL, RET, retAh, retResc, resultado };
+}
+// Cuánto IRPF añade rescatar una cantidad del plan (misma proporción anterior a 2007 que la indicada)
+function costeRescate(importe){
+  const s = state.settings, ratio = s.resc>0 ? Math.min(1,(s.resc40||0)/s.resc) : 0;
+  const base = compute({resc:0, resc40:0, retResc:0}).CL;
+  return compute({resc:importe, resc40:importe*ratio, retResc:0}).CL - base;
+}
+
+// ---------- Render ----------
+const tbody = document.getElementById("tbody"), tfoot = document.getElementById("tfoot");
+function render(){
+  if (!state.rows.length) state.rows = exampleRows();
+  const isEx = state.rows.every(r=>r.example);
+  document.getElementById("exampleBanner").hidden = !isEx;
+  const chip = r => r.example ? '<span class="chip ej">Ejemplo</span>'
+    : r.status==="man" ? '<span class="chip man">Editado</span>'
+    : r.status==="ok" ? '<span class="chip ok" title="Total devengado − total a deducir = líquido">Cuadra</span>'
+    : `<span class="chip rev" title="${esc(r.note||"")}">Revisar</span>`;
+  const money = (r,k) => `<input class="money" type="text" inputmode="decimal" id="r-${r.id}-${k}" data-id="${r.id}" data-k="${k}" value="${r[k]==null?"":fmt(r[k])}" aria-label="${k} ${r.mes!=null?MESES[r.mes]:""}">`;
+  tbody.innerHTML = state.rows.map(r => {
+    const opts = `<option value="">—</option>` + MESES.map((m,i)=>`<option value="${i}"${r.mes===i?" selected":""}>${m}</option>`).join("");
+    const tasa = r.dev ? r.irpf/r.dev : NaN;
+    let html = `<tr class="${r.example?"example":""}">
+      <td class="l"><select id="r-${r.id}-mes" data-id="${r.id}" data-k="mes" aria-label="Mes">${opts}</select><span class="fname" title="${esc(r.file)}">${esc(r.file==="ejemplo"?"":r.file||"a mano")}</span></td>
+      <td class="l"><input type="checkbox" id="r-${r.id}-extra" data-id="${r.id}" data-k="extra"${r.extra?" checked":""} aria-label="Incluye paga extra"></td>
+      <td>${money(r,"dev")}</td><td>${money(r,"ss")}</td><td>${money(r,"irpf")}</td>
+      <td class="num">${pct(tasa)}</td><td>${money(r,"liq")}</td>
+      <td class="l">${chip(r)}${r.note&&r.status!=="ok"&&!r.example?`<span class="fname" title="${esc(r.note)}">${esc(r.note)}</span>`:""}</td>
+      <td class="l" style="white-space:nowrap">${rowLines(r)?`<button type="button" class="ghost" data-raw="${r.id}">${openRaw.has(r.id)?"Ocultar":"Texto"}</button>`:""}<button type="button" class="ghost" data-del="${r.id}" aria-label="Eliminar fila">✕</button></td>
+    </tr>`;
+    if (openRaw.has(r.id)) html += `<tr class="rawrow"><td colspan="9"><pre>${esc(NominaParser.text(rowLines(r)||[]))}</pre></td></tr>`;
+    return html;
+  }).join("");
+  const c = compute();
+  const tasaT = c.real.dev ? c.real.irpf/c.real.dev : NaN;
+  tfoot.innerHTML = `<tr><td class="l" colspan="2">Total cobrado (${state.rows.length} ${state.rows.length===1?"nómina":"nóminas"})</td>
+    <td class="num">${fmt(c.real.dev)}</td><td class="num">${fmt(c.real.ss)}</td><td class="num">${fmt(c.real.irpf)}</td><td class="num">${pct(tasaT)}</td><td class="num">${fmt(c.real.liq)}</td><td colspan="2"></td></tr>`;
+  renderSummary(c); renderChart(c); renderSettings(); renderBank(); renderYear();
+}
+
+function renderSummary(c){
+  const pay = c.resultado > 0.005, ex = state.rows.every(r=>r.example);
+  const res = document.getElementById("result");
+  res.className = "result " + (pay ? "pay" : "refund");
+  const sub = `${state.settings.proj ? "Proyectando el año completo" : "Solo con lo cobrado hasta ahora"}${ex?" · nóminas de ejemplo":""}${c.bk?` · ${c.bk.n} movimientos de banco`:""}`;
+  res.innerHTML = `<span class="k">${pay ? "Te saldría a pagar" : "Te saldría a devolver"}</span><span class="v">${eur(Math.abs(c.resultado))}</span><span class="s">${sub}</span>`;
+  document.getElementById("rbar").className = "rbar" + (pay ? " pay" : "");
+  document.getElementById("rbarK").textContent = `Renta ${curYear} · ${pay ? "a pagar" : "a devolver"}`;
+  document.getElementById("rbarV").textContent = eur(Math.abs(c.resultado));
+  document.getElementById("rbarS").textContent = ex ? "con nóminas de ejemplo" : "";
+  document.getElementById("rRet").textContent = pct(c.RI ? c.RET/c.RI : NaN);
+  document.getElementById("rEf").textContent = pct(c.RI ? c.CL/c.RI : NaN);
+
+  // Dónde va lo que ingresas
+  const ingresos = c.RI + Math.max(0,c.rcm0) + Math.max(0,c.gp0) + c.alqIng;
+  const parts = [["Seguridad Social", c.SS, "var(--ss)"], ["IRPF", c.CL, "var(--irpf)"], ["Te queda", Math.max(0, ingresos - c.SS - c.CL), "var(--neto)"]];
+  document.getElementById("euro").innerHTML = ingresos>0 ? parts.map(([k,v,col]) => `<i style="width:${v/ingresos*100}%;background:${col}" title="${k}: ${eur(v)}"></i>`).join("") : "";
+  document.getElementById("euroLeg").innerHTML = parts.map(([k,v,col]) => `<span><i style="background:${col}"></i>${k} ${ingresos?fmt(v/ingresos*100,1)+" %":""}</span>`).join("");
+
+  const row = (k,v,cls="") => `<div class="row ${cls}"><span>${k}</span><span>${v}</span></div>`;
+  const neg = v => "−"+eur(v);
+  const s = state.settings;
+  let h = `<div class="sec">Rendimientos del trabajo</div>`;
+  h += row("Nóminas: devengado cobrado", eur(c.real.dev), "sub");
+  if (s.proj) h += row(`Proyección: ${c.proj.meses} ${c.proj.meses===1?"mes":"meses"}${c.proj.extras?` + ${c.proj.extras} extra`:""}`, eur(c.proj.dev), "sub");
+  if (s.exentos) h += row("Menos devengos exentos", neg(s.exentos), "sub");
+  if (c.resc) h += row("Rescate del plan de pensiones", eur(c.resc), "sub");
+  if (c.rescRed) h += row("Reducción 40 % aportaciones hasta 2006", neg(c.rescRed), "sub");
+  h += row("Rendimientos íntegros", eur(c.RIcomp), "tot");
+  h += row("Cotizaciones Seguridad Social", neg(c.SS), "sub");
+  if (s.otrosG) h += row("Cuotas sindicales / colegio", neg(s.otrosG), "sub");
+  h += row("Otros gastos (art. 19.2.f)", neg(c.otros2000), "sub");
+  h += row(c.otrasRentas>6500 ? "Reducción del trabajo (perdida: otras rentas > 6.500 €)" : "Reducción por rendimientos del trabajo", c.red ? neg(c.red) : eur(0), "sub");
+  h += row("Rendimiento neto reducido del trabajo", eur(c.trabNeto), "tot");
+  if (c.inms.length){
+    h += `<div class="sec">Inmuebles</div>`;
+    for (const m of c.inms) h += row(`${esc(m.nombre)}${m.red?` (reducción ${fmt(m.redPct*100,0)} %)`:""}`, eur(m.netoRed), "sub");
+    h += row("Rendimiento neto reducido de inmuebles", eur(c.alqNetoRed), "tot");
+  }
+  h += row("Base liquidable general", eur(c.BLG), "tot");
+  h += `<div class="sec">Ahorro</div>`;
+  if (c.bk){ h += row("Dividendos brutos", eur(c.bk.div), "sub"); h += row("Intereses brutos", eur(c.bk.int), "sub"); if (c.bk.cus) h += row("Comisiones de custodia", neg(c.bk.cus), "sub"); }
+  else if (Math.abs(c.rcm0 - c.staking) > 0.005) h += row("Dividendos e intereses (bruto)", eur(c.rcm0 - c.staking), "sub");
+  if (c.staking) h += row("Staking y lending de cripto", eur(c.staking), "sub");
+  if (c.ventasInv) h += row("Ventas de acciones, fondos y cripto", eur(c.ventasInv), "sub");
+  if (Math.abs(c.gp0 - c.ventasInv) > 0.005) h += row("Otras ganancias o pérdidas", eur(c.gp0 - c.ventasInv), "sub");
+  if (c.cross) h += row("Pérdidas del año compensadas (25 %)", neg(c.cross), "sub");
+  if (c.compGP) h += row("Pérdidas anteriores contra ganancias", neg(c.compGP), "sub");
+  if (c.compRCM) h += row("Pérdidas anteriores contra dividendos (25 %)", neg(c.compRCM), "sub");
+  h += row("Base liquidable del ahorro", eur(c.BA), "tot");
+  if (c.pendFut>0.005) h += row("Pérdidas que quedan para próximos años", eur(c.pendFut), "sub");
+  h += `<div class="sec">Cuota</div>`;
+  h += row("Cuota íntegra estatal", eur(c.cE), "sub");
+  h += row("Cuota íntegra Madrid", eur(c.cA), "sub");
+  if (c.dedSmi) h += row("Deducción salarios bajos", neg(c.dedSmi), "sub");
+  if (c.dedDI) h += row("Deducción doble imposición internacional", neg(c.dedDI), "sub");
+  h += row("Cuota líquida", eur(c.CL), "tot");
+  h += `<div class="sec">Retenciones ya pagadas</div>`;
+  h += row("Nóminas", neg(c.RET), "sub");
+  if (c.bk) for (const [b,v] of Object.entries(c.bk.by)) { if (v.r>0.005) h += row(esc(b), neg(v.r), "sub"); }
+  else if (c.retAh) h += row("Ahorro", neg(c.retAh), "sub");
+  if (c.retResc) h += row("Rescate del plan", neg(c.retResc), "sub");
+  h += row(pay ? "A pagar" : "A devolver", eur(Math.abs(c.resultado)), "tot");
+  document.getElementById("ledger").innerHTML = h;
+  renderRescate(); renderIdeal(c); renderInm(c); renderInv(c); renderPat(); renderCompare(c);
+}
+
+// Comparación entre años: calcula cada año guardado con su propia foto
+function computeData(d, y){
+  const keepS = state, keepY = curYear;
+  try {
+    state = { rows:(d?.rows||[]), settings:{...DEFAULT_SETTINGS, ...(d?.settings||{})}, labels:keepS.labels, bank:{rows:d?.bank?.rows||[], files:d?.bank?.files||[], all:d?.bank?.all||[], alias:d?.bank?.alias||{}} };
+    normInm(); curYear = y; const r = compute(); r.pat = patrimonio(); return r;
+  } finally { state = keepS; curYear = keepY; }
+}
+function renderCompare(c){
+  const years = new Set(Object.keys(store.saved).map(Number)); years.add(curYear);
+  const list = [...years].sort((a,b)=>b-a);
+  document.getElementById("cmpBody").innerHTML = list.map(y => {
+    const r = y===curYear ? {...c, pat:patrimonio()} : computeData(store.saved[y]?.data, y);
+    const ret = r.RET + r.retAh + r.retResc;
+    return `<tr${y===curYear?' class="cur"':""}><td class="l num">${y}${y===curYear?' <span class="chip man">Abierto</span>':""}</td><td class="num">${fmt(r.trabNeto)}</td><td class="num">${fmt(r.alqNetoRed)}</td><td class="num">${fmt(r.BA)}</td><td class="num">${fmt(r.CL)}</td><td class="num">${fmt(ret)}</td><td class="num" style="color:var(${r.resultado>0.005?"--pay":"--refund"})">${r.resultado>0.005?"Pagar ":"Devolver "}${fmt(Math.abs(r.resultado))}</td><td class="num">${fmt(r.pat.neto)}</td></tr>`;
+  }).join("");
+}
+
+// ---------- Inmuebles ----------
+const RED_OPTS = [["0.6","60 %: contrato firmado antes del 26/05/2023"],["0.5","50 %: contrato nuevo (caso general)"],["0.7","70 %: zona tensionada, primer alquiler a joven de 18 a 35 años"],["0.6r","60 %: obras de rehabilitación en los 2 años anteriores"],["0.9","90 %: zona tensionada, bajada de renta de más del 5 %"],["0","0 %: turístico, de temporada o por habitaciones"]];
+function normInm(){
+  const st = state.settings;
+  if (!Array.isArray(st.inmuebles)){
+    st.inmuebles = st.alqIng>0 ? [{id:uid(), nombre:"Vivienda alquilada", ing:st.alqIng, intRep:st.alqIntRep||0, gastos:st.alqGastos||0, vc:st.alqVc||0, pct:100, red:st.alqRed ?? "0.6"}] : [];
+  }
+  st.inmuebles = st.inmuebles.map(m => ({...m}));
+  st.cartera = Array.isArray(st.cartera) ? st.cartera.map(x => ({...x})) : [];
+  st.ventas = Array.isArray(st.ventas) ? st.ventas.map(x => ({...x})) : [];
+  st.patDocs = Array.isArray(st.patDocs) ? st.patDocs.map(x => ({...x})) : [];
+}
+function renderInm(c){
+  const list = document.getElementById("inmList"), ims = state.settings.inmuebles||[];
+  document.getElementById("cntInm").textContent = ims.length || "";
+  const f = (m,k,label,extra="") => `<label class="field">${label}<input type="text" inputmode="decimal" id="i-${m.id}-${k}" data-iid="${m.id}" data-ik="${k}" value="${m[k]==null||m[k]===0&&k!=="pct"?"":fmt(m[k], k==="pct"?0:2)}"${extra}></label>`;
+  if (!ims.length){ list.innerHTML = `<div class="empty">No hay inmuebles. Pulsa «Añadir inmueble» si cobras algún alquiler.</div>`; document.getElementById("inmTot").innerHTML=""; return; }
+  if (!list.contains(document.activeElement)) list.innerHTML = ims.map(m => {
+    const r = c.inms.find(x=>x.id===m.id) || {};
+    return `<div class="inm">
+      <div class="inm-head"><input type="text" id="i-${m.id}-nombre" data-iid="${m.id}" data-ik="nombre" value="${esc(m.nombre||"")}" placeholder="Nombre del inmueble" aria-label="Nombre del inmueble"><button type="button" class="ghost danger" data-idel="${m.id}">Quitar</button></div>
+      <div class="fields">
+        ${f(m,"ing","Rentas cobradas en el año (€)")}
+        ${f(m,"intRep","Intereses de hipoteca + reparaciones (€)")}
+        ${f(m,"gastos","IBI, comunidad, seguro, gestoría y otros (€)")}
+        ${f(m,"vc","Valor de la construcción (amortiza el 3 %) (€)")}
+        ${f(m,"pct","Tu parte de la propiedad (%)", ' placeholder="100"')}
+        ${f(m,"valor","Valor para el patrimonio (€)", ' title="El mayor entre valor catastral, valor de referencia y precio de compra"')}
+        <label class="field">Reducción por vivienda habitual del inquilino<select id="i-${m.id}-red" data-iid="${m.id}" data-ik="red">${RED_OPTS.map(([v,l])=>`<option value="${v}"${String(m.red??"0.5")===v?" selected":""}>${l}</option>`).join("")}</select></label>
+      </div>
+      <div class="inm-res">Rendimiento neto <b>${eur(r.neto||0)}</b> · reducción <b>${eur(r.red||0)}</b> · tributa <b>${eur(r.netoRed||0)}</b></div>
+    </div>`;
+  }).join("");
+  document.getElementById("inmTot").innerHTML = `<div class="row tot"><span>Total que tributa por inmuebles</span><span>${eur(c.alqNetoRed)}</span></div>`;
+}
+document.getElementById("inmAdd").onclick = () => {
+  normInm(); const n = state.settings.inmuebles.length+1;
+  state.settings.inmuebles.push({id:uid(), nombre:`Inmueble ${n}`, ing:0, intRep:0, gastos:0, vc:0, pct:100, red:"0.5"});
+  save(); render();
+};
+document.getElementById("inmList").addEventListener("change", e => {
+  const el = e.target, id = el.dataset.iid, k = el.dataset.ik; if (!id) return;
+  const m = (state.settings.inmuebles||[]).find(x=>x.id===id); if (!m) return;
+  if (k==="nombre" || k==="red") m[k] = el.value;
+  else { const v = parseEs(el.value); m[k] = k==="pct" ? (v==null ? 100 : Math.min(100, Math.max(0, v))) : Math.max(0, v||0); }
+  el.blur(); save(); render();
+});
+document.getElementById("inmList").addEventListener("click", e => {
+  const b = e.target.closest("[data-idel]"); if (!b) return;
+  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Seguro?"; setTimeout(()=>{ if (b.isConnected){ delete b.dataset.armed; b.textContent = "Quitar"; } }, 3000); return; }
+  state.settings.inmuebles = state.settings.inmuebles.filter(m => m.id!==b.dataset.idel); save(); render();
+});
+
+// Rescate máximo: sin subir el IRPF y sin que la renta salga a pagar (sin contar la retención de la gestora)
+function renderIdeal(c){
+  const s = state.settings, ratio = s.resc>0 ? Math.min(1,(s.resc40||0)/s.resc) : 0;
+  const cap = s.pPlan>0 ? s.pPlan : 100000;
+  const res = x => compute({resc:x, resc40:x*ratio, retResc:0}).resultado;
+  const search = ok => { if (!ok(0)) return 0; if (ok(cap)) return cap; let lo = 0, hi = cap; for (let i=0; i<40; i++){ const m = (lo+hi)/2; if (ok(m)) lo = m; else hi = m; } return Math.floor(lo); };
+  const g0 = search(x => costeRescate(x) < 0.5), gratis = g0 < 10 ? 0 : g0;
+  const base = res(0), sinPagar = search(x => res(x) <= 0.005);
+  const lim = s.pPlan>0 ? ` (tope: el valor del plan, ${eur(s.pPlan)})` : "";
+  const tile = (k, v, t) => `<div class="bk"><div class="k">${k}</div><div class="v">${v}</div><p class="tip">${t}</p></div>`;
+  $("idealTiles").innerHTML =
+    tile("Sin pagar ni un euro más de IRPF", eur(gratis), gratis>0 ? `Hasta aquí el rescate queda cubierto por tu mínimo personal y las reducciones: el impuesto del año no sube${gratis>=cap?lim:""}.` : "Con tus ingresos, cualquier euro rescatado ya tributa. Mira la columna «Tipo del tramo» de la tabla de abajo.")
+    + tile("Sin que la renta te salga a pagar", eur(sinPagar), base>0.005 ? `Sin rescatar ya te sale a pagar ${eur(base)}, así que no hay margen.` : `Ahora te sale a devolver ${eur(-base)}. Rescatando hasta esta cantidad, lo que pagues de más se come esa devolución, sin poner dinero en junio${sinPagar>=cap?lim:""}.`)
+    + tile("IRPF que te cuesta ese rescate", eur(costeRescate(sinPagar)), sinPagar ? `Es la devolución a la que renuncias: un ${pct(costeRescate(sinPagar)/sinPagar)} de lo rescatado.` : "Sin rescate no hay coste.");
+  const ex = state.rows.every(r=>r.example);
+  $("idealNote").innerHTML = `${ex ? "<strong>Ojo: ahora calcula con nóminas de ejemplo.</strong> " : ""}La retención que te aplique Santa Lucía al cobrar no cambia el impuesto final: es un adelanto que se descuenta en la renta. Si rescatas más de 1.500 € y tus rendimientos del trabajo pasan de 15.876 €, tendrás que presentar la declaración (dos pagadores). ${s.proj ? "Calcula con el año proyectado hasta diciembre." : "Calcula solo con lo cobrado hasta ahora."}`;
+}
+function renderRescate(){
+  const s = state.settings;
+  const amounts = [2000,4000,6000,8000,10000,15000,20000,30000,50000];
+  if (s.resc>0 && !amounts.includes(s.resc)) amounts.push(s.resc);
+  amounts.sort((a,b)=>a-b);
+  let prev = {imp:0, cost:0};
+  document.getElementById("rescBody").innerHTML = amounts.map(a => {
+    const cost = costeRescate(a);
+    const marg = (cost-prev.cost)/(a-prev.imp); prev = {imp:a, cost};
+    const mine = a===s.resc;
+    return `<tr${mine?' class="mine"':""}><td class="l num">${fmt(a,0)} €${mine?' <span class="chip man">Tu rescate</span>':""}</td>
+      <td class="num">${fmt(cost)}</td><td class="num">${pct(cost/a)}</td><td class="num">${pct(marg)}</td><td class="num">${fmt(a-cost)}</td></tr>`;
+  }).join("");
+  const box = document.getElementById("rescMine");
+  if (s.resc>0){
+    const cost = costeRescate(s.resc);
+    box.hidden = false;
+    box.innerHTML = `Rescatar <strong>${eur(s.resc)}</strong> te sube el IRPF del año en <strong>${eur(cost)}</strong> (${pct(cost/s.resc)} de media). Te quedarían <strong>${eur(s.resc-cost)}</strong> limpios.`;
+  } else box.hidden = true;
+}
+
+function renderChart(c){
+  const svg = document.getElementById("chart");
+  const W=660, H=240, L=52, R=10, T=12, B=28, iw=W-L-R, ih=H-T-B;
+  const months = Array.from({length:12}, (_,m)=>({ss:0,irpf:0,dev:0,proj:false}));
+  for (const r of state.rows){ if (r.mes==null) continue; const m=months[r.mes]; m.dev+=r.dev||0; m.ss+=r.ss||0; m.irpf+=r.irpf||0; }
+  for (const m of c.projMonths){ Object.assign(months[m], {dev:c.avg.dev, ss:c.avg.ss, irpf:c.avg.irpf, proj:true}); }
+  const max = Math.max(1, ...months.map(m=>m.dev));
+  const rawStep = max/4, mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const step = [1,2,2.5,5,10].map(x=>x*mag).find(x=>x>=rawStep);
+  const top = Math.ceil(max/step)*step;
+  const y = v => T + ih - v/top*ih;
+  let g = "";
+  for (let v=0; v<=top+1e-6; v+=step){
+    g += `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/>`;
+    g += `<text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" font-family="IBM Plex Mono, monospace" fill="var(--muted)">${fmt(v,0)}</text>`;
+  }
+  const bw = iw/12, w = bw*0.62;
+  months.forEach((m,i)=>{
+    const x = L + i*bw + (bw-w)/2;
+    if (m.dev>0){
+      const neto = Math.max(0, m.dev - m.ss - m.irpf);
+      const op = m.proj ? ' fill-opacity="0.35"' : "";
+      let cur = 0;
+      for (const [v,col] of [[neto,"var(--neto)"],[m.ss,"var(--ss)"],[m.irpf,"var(--irpf)"]]){
+        if (v<=0) continue;
+        g += `<rect x="${x}" y="${y(cur+v)}" width="${w}" height="${Math.max(0,y(cur)-y(cur+v))}" fill="${col}"${op}><title>${MESES[i]}${m.proj?" (proyectado)":""}: ${eur(v)}</title></rect>`;
+        cur += v;
+      }
+      if (m.proj) g += `<rect x="${x}" y="${y(m.dev)}" width="${w}" height="${y(0)-y(m.dev)}" fill="none" stroke="var(--muted)" stroke-dasharray="3 3"/>`;
+    }
+    g += `<text x="${L+i*bw+bw/2}" y="${H-8}" text-anchor="middle" font-size="11" font-family="IBM Plex Mono, monospace" fill="var(--muted)">${MESES[i]}</text>`;
+  });
+  svg.innerHTML = g;
+}
+
+const SET_FIELDS = [["s-staking","staking","money"],["p-cuentas","pCuentas","money"],["p-vivienda","pVivienda","money"],["p-plan","pPlan","money"],["s-planVal","pPlan","money"],["p-otros","pOtros","money"],["p-deudas","pDeudas","money"],["p-extc","pExtCuentas","money"],["p-donac","pDonac","money"],["b-gp","gp","money"],["b-perdAnt","perdAnt","money"],["s-extraN","extraN","int"],["s-extraImp","extraImp","money"],["s-exentos","exentos","money"],["s-otrosG","otrosG","money"],["s-ahorro","ahorro","money"],["s-retAh","retAh","money"],["s-resc","resc","money"],["s-resc40","resc40","money"],["s-retResc","retResc","money"],["s-minE","minE","money"],["s-minA","minA","money"]];
+function renderSettings(){
+  const s = state.settings;
+  document.getElementById("proj").checked = !!s.proj;
+  for (const [id,k,t] of SET_FIELDS){
+    const el = document.getElementById(id); if (document.activeElement===el) continue;
+    el.value = t==="int" ? (s[k]||0) : (s[k]==null||(s[k]===0 && !["minE","minA"].includes(k)) ? "" : fmt(s[k]));
+  }
+  for (const k of ["dev","ss","irpf","liq"]){ const el=document.getElementById("lab-"+k); if (document.activeElement!==el) el.value = state.labels[k].join("\n"); }
+  const bk = bankTotals(false), a = document.getElementById("s-ahorro"), r = document.getElementById("s-retAh");
+  a.readOnly = r.readOnly = !!bk; document.getElementById("ahorroSrc").hidden = !bk;
+  if (bk){ a.value = fmt(bk.rcm); r.value = fmt(bk.ret); }
+}
+
+// ---------- Eventos ----------
+const drop = document.getElementById("drop"), fileIn = document.getElementById("file");
+fileIn.addEventListener("change", e => { handleFiles([...e.target.files]); fileIn.value=""; });
+drop.addEventListener("keydown", e => { if (e.key==="Enter"||e.key===" "){ e.preventDefault(); fileIn.click(); } });
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => handleFiles([...e.dataTransfer.files]));
+
+tbody.addEventListener("change", e => {
+  const el = e.target, id = el.dataset.id, k = el.dataset.k; if (!id) return;
+  const r = state.rows.find(r=>r.id===id); if (!r) return;
+  if (k==="mes") r.mes = el.value==="" ? null : +el.value;
+  else if (k==="extra") r.extra = el.checked;
+  else { r[k] = parseEs(el.value); if (!r.example) r.status = "man"; }
+  if (r.example){ r.example=false; r.file="a mano"; r.status="man"; state.rows = state.rows.filter(x=>!x.example || x===r); }
+  sortRows(); save(); render();
+});
+tbody.addEventListener("click", e => {
+  const del = e.target.closest("[data-del]"), raw = e.target.closest("[data-raw]");
+  if (del){ state.rows = state.rows.filter(r=>r.id!==del.dataset.del); if (state.rows.length===0) state.rows=[]; save(); render(); }
+  if (raw){ const id=raw.dataset.raw; openRaw.has(id)?openRaw.delete(id):openRaw.add(id); render(); }
+});
+document.getElementById("addRow").onclick = () => {
+  state.rows = state.rows.filter(r=>!r.example);
+  const used = new Set(state.rows.map(r=>r.mes)); let mes = null; for (let m=0;m<12;m++) if(!used.has(m)){mes=m;break;}
+  state.rows.push({id:uid(), file:"a mano", mes, extra:false, dev:null, ss:null, irpf:null, liq:null, status:"man", text:""});
+  sortRows(); save(); render();
+};
+const clearBtn = document.getElementById("clearAll"); let clearT;
+clearBtn.onclick = () => {
+  if (clearBtn.dataset.armed){ state.rows=[]; openRaw.clear(); save(); delete clearBtn.dataset.armed; clearBtn.textContent="Borrar todo"; render(); return; }
+  clearBtn.dataset.armed="1"; clearBtn.textContent="¿Seguro? Pulsa otra vez";
+  clearTimeout(clearT); clearT = setTimeout(()=>{ delete clearBtn.dataset.armed; clearBtn.textContent="Borrar todo"; }, 3500);
+};
+document.getElementById("copyTsv").onclick = async () => {
+  const head = ["Mes","Paga extra","Total devengado","S. Social trabajador","IRPF retenido","Líquido","Archivo"];
+  const lines = [head.join("\t"), ...state.rows.map(r=>[r.mes!=null?MESES[r.mes]:"", r.extra?"Sí":"", fmt(r.dev), fmt(r.ss), fmt(r.irpf), fmt(r.liq), r.file||""].map(v=>v==="—"?"":v).join("\t"))];
+  const txt = lines.join("\n"), msg = document.getElementById("copyMsg");
+  try { await navigator.clipboard.writeText(txt); msg.textContent = "Tabla copiada. Pégala en Excel o Google Sheets."; }
+  catch(e){ msg.innerHTML = 'No he podido copiar directamente. Selecciona este texto y cópialo:<textarea id="copyFallback" readonly></textarea>'; const t=document.getElementById("copyFallback"); t.value=txt; t.select(); }
+};
+document.getElementById("proj").onchange = e => { state.settings.proj = e.target.checked; save(); render(); };
+for (const [id,k,t] of SET_FIELDS){
+  document.getElementById(id).addEventListener("change", e => {
+    const v = t==="int" ? Math.max(0, parseInt(e.target.value)||0) : parseEs(e.target.value);
+    if ((k==="ahorro"||k==="retAh") && bankTotals(false)) return;
+    state.settings[k] = (k==="extraImp") ? v : (v ?? (k==="minE"?P.minE:k==="minA"?P.minA:0));
+    save(); render();
+  });
+}
+for (const k of ["dev","ss","irpf","liq"]){
+  document.getElementById("lab-"+k).addEventListener("change", e => { state.labels[k] = e.target.value.split("\n").map(s=>s.trim()).filter(Boolean); save(); });
+}
+document.getElementById("reparse").onclick = () => {
+  for (const k of ["dev","ss","irpf","liq"]) state.labels[k] = document.getElementById("lab-"+k).value.split("\n").map(s=>s.trim()).filter(Boolean);
+  for (const r of state.rows){ const ls = rowLines(r); if (!ls) continue; Object.assign(r, parseRow(ls, r.file)); }
+  sortRows(); save(); render();
+};
+document.getElementById("resetLabels").onclick = () => { state.labels = JSON.parse(JSON.stringify(DEFAULT_LABELS)); save(); renderSettings(); };
+
+// ---------- Bancos: lectura de extractos ----------
+const BANKS = ["Ibercaja","Openbank","Trade Republic","Otro"];
+const TIPOS = {div:"Dividendo", int:"Interés", ret:"Retención IRPF", cus:"Comisión custodia", venta:"Venta (resultado)", otro:"No deducible"};
+const $ = id => document.getElementById(id);
+const bankExample = () => [
+  ["15/02","Ibercaja","ABONO DIVIDENDO IBERDROLA","div",97.20,"neto",0],
+  ["30/04","Openbank","LIQUIDACION INTERESES CUENTA","int",40.50,"neto",0],
+  ["02/06","Trade Republic","Dividend Realty Income","div",8.42,"bruto",1.26],
+  ["02/06","Trade Republic","Retención Realty Income","ret",1.36,"bruto",0],
+  ["01/07","Trade Republic","Interest payment","int",31.10,"neto",0],
+  ["10/07","Ibercaja","COMISION CUSTODIA VALORES","cus",12.10,"bruto",0]
+].map(([f,b,c,t,i,m,ro]) => ({id:uid(), example:true, inc:true, fecha:f+"/"+curYear, banco:b, concepto:c, tipo:t, importe:i, modo:m, retOrigen:ro}));
+
+const parseAny = v => {
+  if (typeof v==="number") return v;
+  let s = String(v??"").replace(/[€\s ]|EUR/gi,""); if (!s) return NaN;
+  const neg = /^-|-$|^\(.*\)$/.test(s); s = s.replace(/[()+\-]/g,"");
+  const c = s.lastIndexOf(","), d = s.lastIndexOf(".");
+  if (c>-1 && d>-1) s = c>d ? s.replace(/\./g,"").replace(",",".") : s.replace(/,/g,"");
+  else if (c>-1) s = s.replace(",",".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,"");
+  const n = parseFloat(s); return isNaN(n) ? NaN : (neg?-n:n);
+};
+const RE_DATE = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})(?!\d)|(\d{4})-(\d{2})-(\d{2})/;
+const MES3 = {ene:1,jan:1,feb:2,mar:3,abr:4,apr:4,may:5,jun:6,jul:7,ago:8,aug:8,sep:9,set:9,oct:10,nov:11,dic:12,dec:12};
+const RE_DATE_TXT = /(?<![\d.,])(\d{1,2})\.?\s*(?:de\s+)?(ene(?:ro)?|jan(?:uary)?|feb(?:rero|ruary)?|mar(?:zo|ch)?|abr(?:il)?|apr(?:il)?|may(?:o)?|jun(?:io|e)?|jul(?:io|y)?|ago(?:sto)?|aug(?:ust)?|sep(?:t(?:iembre|ember)?|tiembre)?|set(?:iembre)?|oct(?:ubre|ober)?|nov(?:iembre|ember)?|dic(?:iembre)?|dec(?:ember)?)\.?(?![a-z])(?:,?\s*(?:de\s+)?(20\d{2}))?/i;
+const getDate = (t, defY) => {
+  const s = String(t), m = s.match(RE_DATE);
+  if (m){ if (m[4]) return `${m[6]}/${m[5]}/${m[4]}`; let y = m[3]; if (y.length===2) y = "20"+y; return `${m[1].padStart(2,"0")}/${m[2].padStart(2,"0")}/${y}`; }
+  const n = s.match(RE_DATE_TXT);
+  if (n && +n[1]>=1 && +n[1]<=31){ const mo = MES3[n[2].slice(0,3).toLowerCase()]; return `${n[1].padStart(2,"0")}/${String(mo).padStart(2,"0")}/${n[3] || defY || curYear}`; }
+  return "";
+};
+const yearOf = f => { const m = String(f).match(/(\d{4})$/); return m ? +m[1] : null; };
+// Cifras con 1 o 2 decimales («18.1», «18,56», «15.230,55»), sin confundir fechas como 31.03.2026
+const RE_AMT = /(?<![\d.,])-?\d{1,3}(?:[.\s]\d{3})*,\d{1,2}(?![\d.,])|(?<![\d.,])-?\d+[.,]\d{1,2}(?![\d.,])/g;
+function classify(t){
+  const s = String(t).toLowerCase();
+  if (/retenci[oó]n|withholding|irpf|quellensteuer|kapitalertragsteuer|hacienda p[uú]blica|\btax\b/.test(s)) return "ret";
+  if (/dividend|\bdiv\b|cup[oó]n|distribution|reparto/.test(s)) return "div";
+  if (/inter[eé]s|interest|zinsen|remuneraci[oó]n|liquidaci[oó]n.*(cuenta|dep[oó]sito)|rendimiento/.test(s)) return "int";
+  if (/custodia|administraci[oó]n.*valores|mantenimiento.*valores|dep[oó]sito de valores/.test(s)) return "cus";
+  if (/\bventa\b|\bsell\b|enajenaci|reembolso.*fondo/.test(s)) return "venta";
+  if (/mantenimiento|comisi[oó]n.*(cuenta|tarjeta)/.test(s)) return "otro"; // no desgrava, pero se muestra
+  return null;
+}
+const bankOf = (name, text) => { const s = (name+" "+text.slice(0,5000)).toLowerCase();
+  if (s.includes("ibercaja")) return "Ibercaja"; if (s.includes("openbank")) return "Openbank";
+  if (s.includes("trade republic") || s.includes("traderepublic")) return "Trade Republic"; return "Otro"; };
+const cleanConcept = t => String(t).replace(RE_AMT,"").replace(new RegExp(RE_DATE.source,"g"),"").replace(new RegExp(RE_DATE_TXT.source,"gi"),"").replace(/\s{2,}/g," ").trim().slice(0,120);
+// Cifras de una línea, sin porcentajes (tipos de interés, TAE)
+const textAmounts = t => [...String(t).matchAll(RE_AMT)].filter(m => !/^\s*%/.test(t.slice(m.index+m[0].length))).map(m => parseAny(m[0])).filter(n => !isNaN(n));
+const uniqAbs = arr => [...new Set(arr.map(n => Math.round(Math.abs(n)*100)/100))];
+function fromLine(line, bank, defY){
+  const tipo = classify(line); if (!tipo) return null;
+  const amts = textAmounts(line);
+  if (!amts.length) return null;
+  const raw = amts.length>=2 ? amts[amts.length-2] : amts[0]; // sin columnas: el importe suele ir antes del saldo
+  return {fecha:getDate(line, defY), banco:bank, concepto:cleanConcept(line), tipo, raw, alts:uniqAbs(amts)};
+}
+// PDF: localiza las columnas «Importe» (o Abono/Cargo) y «Saldo» en la cabecera y toma la cifra que cae bajo Importe
+function lineAmounts(items){
+  const out = [];
+  items.forEach((it, i) => {
+    const s = String(it[2]), next = String(items[i+1]?.[2] || "");
+    for (const m of s.matchAll(RE_AMT)){
+      const after = s.slice(m.index + m[0].length);
+      if (/^\s*%/.test(after) || (!after.trim() && /^\s*%/.test(next))) continue;
+      const n = parseAny(m[0]); if (!isNaN(n)) out.push({n, c:it[0]+it[1]/2, r:it[0]+it[1]});
+    }
+  });
+  return out;
+}
+const dist = (a, col) => col ? Math.min(Math.abs(a.c-col.c), Math.abs(a.r-col.r)) : Infinity;
+// Cabecera de columnas en un PDF: Importe / Abono-Entrada / Cargo-Salida / Saldo
+function headerCols(items, text){
+  const low = text.toLowerCase();
+  if (!/saldo|balance/.test(low) || !/importe|cantidad|abono|haber|cargo|debe|entrada|salida/.test(low) || text.match(RE_AMT)) return null;
+  const pos = re => { const it = items.find(i => re.test(String(i[2]).toLowerCase())); return it ? {c:it[0]+it[1]/2, r:it[0]+it[1]} : null; };
+  return { imp:pos(/importe|cantidad/), abono:pos(/abono|haber|entrada/), cargo:pos(/cargo|debe|salida/), saldo:pos(/saldo|balance/) };
+}
+// Elige el importe (y el saldo) de una línea según las columnas
+function pickAmount(am, cols){
+  const money = cols ? [["imp",cols.imp],["abono",cols.abono],["cargo",cols.cargo]].filter(x => x[1]) : [];
+  if (!money.length) return am.length>=2 ? {n:am[am.length-2].n, saldo:am[am.length-1].n, dudoso:false} : {n:am[0].n, saldo:null, dudoso:false};
+  const dm = a => Math.min(...money.map(([,c]) => dist(a,c)));
+  const ds = a => cols.saldo ? dist(a, cols.saldo) : Infinity;
+  const cand = am.filter(a => dm(a) <= ds(a)), sal = am.filter(a => ds(a) < dm(a));
+  const best = (cand.length ? cand : am).reduce((b, a) => dm(a) < dm(b) ? a : b);
+  let n = best.n;
+  const which = money.reduce((b, x) => dist(best, x[1]) < dist(best, b[1]) ? x : b)[0];
+  if (which==="cargo" && cols.abono && n>0) n = -n;
+  return { n, dudoso: !cand.length, saldo: sal.length ? sal.reduce((b, a) => ds(a) < ds(b) ? a : b).n : null };
+}
+function fromItems(rawLines, bank, defY){
+  let cols = null; const out = [];
+  for (const items of rawLines){
+    const text = items.map(i => i[2]).join("  ");
+    const h = headerCols(items, text); if (h){ cols = h; continue; }
+    const tipo = classify(text); if (!tipo) continue;
+    const am = lineAmounts(items); if (!am.length) continue;
+    const p = pickAmount(am, cols);
+    out.push({fecha:getDate(text, defY), banco:bank, concepto:cleanConcept(text), tipo, raw:p.n, dudoso:p.dudoso, alts:uniqAbs(am.map(a => a.n))});
+  }
+  return out;
+}
+// Columnas de una hoja de cálculo o CSV
+function tableCols(tab){
+  const low = r => r.map(c => String(c).toLowerCase().trim());
+  let hi = tab.findIndex(r => { const t = low(r); return t.some(c => /fecha|date|datum/.test(c)) && t.some(c => /importe|amount|cantidad|betrag|abono|cargo|haber|debe|entrada|salida/.test(c)) && r.filter(c => String(c).trim()).length>=3; });
+  if (hi<0) hi = tab.findIndex(r => r.some(c => /fecha|date|concepto|importe|amount|descrip/i.test(c)));
+  if (hi<0) return null;
+  const h = low(tab[hi]);
+  const ci = (re, ex=[]) => h.findIndex((c,i) => re.test(c) && !ex.includes(i));
+  const cF = ci(/fecha|date|datum/), cSaldo = ci(/saldo|balance/);
+  const cAmt = ci(/importe|amount|cantidad|betrag|^valor$/, [cSaldo]);
+  const cAbono = ci(/abono|haber|entrada|ingreso|credit/, [cSaldo]), cCargo = ci(/cargo|debe|salida|gasto|debit/, [cSaldo]);
+  let cTxt = ci(/concepto|descrip|detalle/, [cF]); if (cTxt<0) cTxt = ci(/movimiento|operaci|type|tipo/, [cF, cAmt]);
+  if (cAmt<0 && cAbono<0 && cCargo<0) return null;
+  return {hi, cF, cSaldo, cAmt, cAbono, cCargo, cTxt};
+}
+const rowAmount = (r, c) => {
+  if (c.cAmt>=0) return parseAny(r[c.cAmt]);
+  const a = c.cAbono>=0 ? parseAny(r[c.cAbono]) : NaN, b = c.cCargo>=0 ? parseAny(r[c.cCargo]) : NaN;
+  if (isNaN(a) && isNaN(b)) return NaN;
+  return (isNaN(a) ? 0 : Math.abs(a)) - (isNaN(b) ? 0 : Math.abs(b));
+};
+function fromTable(tab, bank, defY){
+  const c = tableCols(tab); if (!c) return null;
+  const out = [];
+  for (const r of tab.slice(c.hi+1)){
+    const txt = r.join(" "), tipo = classify(txt); if (!tipo) continue;
+    const raw = rowAmount(r, c); if (isNaN(raw)) continue;
+    const alts = uniqAbs(r.map(parseAny).filter((n, i) => !isNaN(n) && i!==c.cF && /[.,]\d{1,2}$/.test(String(r[i]).trim())));
+    out.push({fecha:getDate(c.cF>=0 ? r[c.cF] : txt, defY), banco:bank, concepto:String(c.cTxt>=0 ? r[c.cTxt] : cleanConcept(txt)).slice(0,120), tipo, raw, alts});
+  }
+  return out;
+}
+async function readBankPDF(file){
+  if (!window.pdfjsLib) throw new Error("el lector de PDF no ha cargado; exporta el extracto en CSV o Excel");
+  const items = await pdfLines(await file.arrayBuffer());
+  return {lines:items.map(it => it.map(i=>i[2]).join("  ")), table:null, items};
+}
+async function readBankSheet(file){
+  if (!window.XLSX) throw new Error("el lector de Excel no ha cargado; recarga la página");
+  let wb;
+  if (/\.(csv|txt)$/i.test(file.name)){
+    const buf = await file.arrayBuffer(); let txt;
+    try { txt = new TextDecoder("utf-8", {fatal:true}).decode(buf); } catch(e){ txt = new TextDecoder("windows-1252").decode(buf); }
+    wb = XLSX.read(txt, {type:"string", raw:true});
+  } else wb = XLSX.read(await file.arrayBuffer(), {type:"array", cellDates:true, dateNF:"dd/mm/yyyy"});
+  const table = [];
+  wb.SheetNames.forEach(n => table.push(...XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:false, defval:"", dateNF:"dd/mm/yyyy"})));
+  return {lines:table.map(r=>r.join("  ")), table};
+}
+async function handleBankFiles(list){
+  const st = $("bstatus"), msgs = [];
+  for (const f of list){
+    st.textContent = "Leyendo "+f.name+"…";
+    try {
+      const {lines, table, items} = /\.pdf$/i.test(f.name) ? await readBankPDF(f) : await readBankSheet(f);
+      const joined = lines.join(" "), defY = fileYear(joined);
+      const bank = bankOf(f.name, joined), acct = acctOf(bank, joined);
+      let found = table ? fromTable(table, bank, defY) : items ? fromItems(items, bank, defY) : null;
+      if (!found || !found.length) found = lines.map(l => fromLine(l, bank, defY)).filter(Boolean);
+      found = found.filter(r => !(["div","int"].includes(r.tipo) && r.raw<0)); // cargos que no son cobros
+      const movs = table ? allFromTable(table, defY) : items ? allFromItems(items, defY) : [];
+      orderFile(movs);
+      const hasRet = found.some(r => r.tipo==="ret");
+      // Si vuelves a subir el mismo archivo, sustituye su versión anterior
+      state.bank.rows = state.bank.rows.filter(r => !r.example && r.file!==f.name);
+      state.bank.all = (state.bank.all||[]).filter(m => m.file!==f.name);
+      const fk = r => [r.banco, r.fecha, (+r.importe||0).toFixed(2), normC(r.concepto)].join("|");
+      const seenF = new Set(state.bank.rows.map(fk)); let dup = 0, nF = 0;
+      for (const r of found){
+        const y = yearOf(r.fecha);
+        const row = {id:uid(), file:f.name, inc: r.tipo!=="otro" && (!y || y===curYear), fecha:r.fecha, banco:bank, concepto:r.concepto, tipo:r.tipo,
+          importe: r.tipo==="venta" ? 0 : Math.abs(r.raw), modo: hasRet ? "bruto" : "neto", retOrigen:0, alts:(r.alts||[]).length>1 ? r.alts : undefined, dudoso:r.dudoso||undefined};
+        if (seenF.has(fk(row))){ dup++; continue; }
+        state.bank.rows.push(row); nF++;
+      }
+      const mk = m => [m.acct, m.fecha, (+m.importe).toFixed(2), m.saldo==null ? "" : (+m.saldo).toFixed(2), normC(m.concepto)].join("|");
+      const seenA = new Set(state.bank.all.map(mk)); let nA = 0;
+      for (const m of movs){
+        const x = {file:f.name, acct, fecha:m.fecha, concepto:m.concepto, importe:Math.round(m.importe*100)/100, saldo:m.saldo==null ? null : Math.round(m.saldo*100)/100, seq:m.seq, dudoso:m.dudoso};
+        if (seenA.has(mk(x))){ dup++; continue; }
+        state.bank.all.push(x); nA++;
+      }
+      state.bank.files = state.bank.files.filter(x => x.name!==f.name).concat({name:f.name, bank, acct, n:nF, m:nA});
+      if (!nF && !nA) msgs.push(`En ${f.name} no he encontrado movimientos.`);
+      if (dup) msgs.push(`${f.name}: ${dup} movimientos ya estaban en otro extracto y no se han duplicado.`);
+    } catch(e){ msgs.push(`No he podido leer ${f.name}: ${e.message}.`); }
+  }
+  st.textContent = msgs.join(" ");
+  save(); render();
+}
+
+function bankTotals(withEx){
+  const rs = state.bank.rows.filter(r => r.inc && (withEx || !r.example));
+  if (!rs.length) return null;
+  const t = {div:0, int:0, cus:0, ret:0, ventas:0, foreignRet:0, foreignGross:0, by:{}, n:rs.length};
+  for (const r of rs){
+    const b = t.by[r.banco] = t.by[r.banco] || {g:0, r:0};
+    const imp = r.importe || 0;
+    if (r.tipo==="div" || r.tipo==="int"){
+      let g = imp, rt = 0; if (r.modo==="neto"){ g = imp/0.81; rt = g-imp; }
+      t[r.tipo] += g; t.ret += rt; b.g += g; b.r += rt;
+      if (r.tipo==="div" && r.retOrigen>0){ t.foreignRet += r.retOrigen; t.foreignGross += g; }
+    } else if (r.tipo==="ret"){ t.ret += imp; b.r += imp; }
+    else if (r.tipo==="cus") t.cus += imp;
+    else if (r.tipo==="venta") t.ventas += imp;
+  }
+  t.rcm = t.div + t.int - t.cus;
+  return t;
+}
+
+function renderBank(){
+  if (!state.bank.rows.length) state.bank.rows = bankExample();
+  const rows = state.bank.rows, isEx = rows.every(r=>r.example);
+  $("bExBanner").hidden = !isEx;
+  $("bfiles").innerHTML = state.bank.files.map((f,i) => `<span class="filechip"><strong>${esc(f.acct||f.bank)}</strong> · ${esc(f.name)} · ${f.n} fiscales${f.m!=null?` · ${f.m} movimientos`:""} <button type="button" class="ghost" data-fdel="${i}" aria-label="Quitar ${esc(f.name)}">✕</button></span>`).join("");
+  const opt = (list, cur) => list.map(([v,l]) => `<option value="${esc(v)}"${v===cur?" selected":""}>${esc(l)}</option>`).join("");
+  $("btbody").innerHTML = rows.map(r => {
+    const ch = ["div","int"].includes(r.tipo);
+    return `<tr class="${r.example?"example":""}${r.inc?"":" off"}">
+      <td class="l"><input type="checkbox" id="b-${r.id}-inc" data-bid="${r.id}" data-k="inc"${r.inc?" checked":""} aria-label="Incluir"></td>
+      <td class="l"><input type="text" id="b-${r.id}-fecha" data-bid="${r.id}" data-k="fecha" value="${esc(r.fecha)}" style="width:100px" aria-label="Fecha"></td>
+      <td class="l"><select id="b-${r.id}-banco" data-bid="${r.id}" data-k="banco" aria-label="Banco">${opt(BANKS.map(b=>[b,b]), r.banco)}</select></td>
+      <td class="l"><input type="text" class="concept" id="b-${r.id}-concepto" data-bid="${r.id}" data-k="concepto" value="${esc(r.concepto)}" title="${esc(r.concepto)}" aria-label="Concepto">${r.example?' <span class="chip ej">Ejemplo</span>':""}${r.dudoso?' <span class="chip rev" title="La única cifra de la línea está en la columna Saldo. Comprueba el importe en el extracto.">Revisar importe</span>':""}</td>
+      <td class="l"><select id="b-${r.id}-tipo" data-bid="${r.id}" data-k="tipo" aria-label="Tipo">${opt(Object.entries(TIPOS), r.tipo)}</select></td>
+      <td style="white-space:nowrap"><input class="money" type="text" inputmode="decimal" id="b-${r.id}-importe" data-bid="${r.id}" data-k="importe" value="${fmt(r.importe||0)}" aria-label="Importe">${r.alts ? `<select class="alts" id="b-${r.id}-alt" data-bid="${r.id}" data-k="alt" title="Otras cifras de esta línea del extracto" aria-label="Elegir otra cifra de la línea"><option value="">⇄</option>${r.alts.map(a => `<option value="${a}"${Math.abs(a-(r.importe||0))<0.005?" selected":""}>${fmt(a)}</option>`).join("")}</select>` : ""}</td>
+      <td class="l"><select id="b-${r.id}-modo" data-bid="${r.id}" data-k="modo"${ch?"":" disabled"} aria-label="Neto o bruto">${opt([["neto","Neto"],["bruto","Bruto"]], r.modo)}</select></td>
+      <td><input class="money" type="text" inputmode="decimal" id="b-${r.id}-ro" data-bid="${r.id}" data-k="retOrigen" value="${fmt(r.retOrigen||0)}"${r.tipo==="div"?"":" disabled"} aria-label="Retención en origen"></td>
+      <td class="l"><button type="button" class="ghost" data-bdel="${r.id}" aria-label="Eliminar fila">✕</button></td>
+    </tr>`;
+  }).join("");
+  const t = bankTotals(isEx) || {div:0,int:0,cus:0,ret:0,ventas:0,foreignRet:0,by:{},rcm:0};
+  const tile = (k,v) => `<div class="bk"><div class="k">${k}</div><div class="v">${eur(v)}</div></div>`;
+  $("bkgrid").innerHTML = tile("Dividendos brutos", t.div) + tile("Intereses brutos", t.int) + tile("Comisiones de custodia", t.cus)
+    + tile("Retenido en España", t.ret) + tile("Retenido en origen", t.foreignRet) + (t.ventas ? tile("Ventas (resultado)", t.ventas) : "");
+  $("bkBank").innerHTML = Object.entries(t.by).map(([b,v]) => `<tr><td class="l">${esc(b)}</td><td class="num">${fmt(v.g)}</td><td class="num">${fmt(v.r)}</td></tr>`).join("") || `<tr><td class="l" colspan="3">Sin movimientos incluidos</td></tr>`;
+  $("bresHint").textContent = isEx ? "Ejemplo: no cuenta en la estimación" : "Se suma solo a la estimación";
+  $("cntBan").textContent = isEx ? "" : rows.filter(r=>r.inc).length;
+  $("cntNom").textContent = state.rows.every(r=>r.example) ? "" : state.rows.length;
+  renderUnified();
+}
+
+$("btbody").addEventListener("change", e => {
+  const el = e.target, id = el.dataset.bid, k = el.dataset.k; if (!id) return;
+  const r = state.bank.rows.find(x => x.id===id); if (!r) return;
+  if (r.example){ r.example = false; state.bank.rows = state.bank.rows.filter(x => !x.example || x===r); }
+  if (k==="inc") r.inc = el.checked;
+  else if (k==="alt"){ if (el.value!==""){ r.importe = parseFloat(el.value); delete r.dudoso; } }
+  else if (k==="importe" || k==="retOrigen"){ if (k==="importe") delete r.dudoso; const n = parseAny(el.value); r[k] = isNaN(n) ? 0 : (r.tipo==="venta" && k==="importe" ? n : Math.abs(n)); }
+  else r[k] = el.value;
+  if (k==="fecha"){ const y = yearOf(r.fecha); if (y) r.inc = y===curYear; }
+  save(); render();
+});
+$("btbody").addEventListener("click", e => {
+  const b = e.target.closest("[data-bdel]"); if (!b) return;
+  state.bank.rows = state.bank.rows.filter(r => r.id!==b.dataset.bdel);
+  if (!state.bank.rows.length) state.bank.rows = [];
+  save(); render();
+});
+$("bAdd").onclick = () => {
+  state.bank.rows = state.bank.rows.filter(r => !r.example);
+  state.bank.rows.push({id:uid(), inc:true, fecha:"", banco:"Otro", concepto:"", tipo:"div", importe:0, modo:"neto", retOrigen:0});
+  save(); render();
+};
+const bClear = $("bClear"); let bClearT;
+bClear.onclick = () => {
+  if (bClear.dataset.armed){ state.bank.rows = []; state.bank.files = []; state.bank.all = []; delete bClear.dataset.armed; bClear.textContent = "Borrar todo"; save(); render(); return; }
+  bClear.dataset.armed = "1"; bClear.textContent = "¿Seguro? Pulsa otra vez";
+  clearTimeout(bClearT); bClearT = setTimeout(() => { delete bClear.dataset.armed; bClear.textContent = "Borrar todo"; }, 3500);
+};
+const bdrop = $("bdrop"), bfile = $("bfile");
+bfile.addEventListener("change", e => { handleBankFiles([...e.target.files]); bfile.value = ""; });
+bdrop.addEventListener("keydown", e => { if (e.key==="Enter" || e.key===" "){ e.preventDefault(); bfile.click(); } });
+["dragenter","dragover"].forEach(ev => bdrop.addEventListener(ev, e => { e.preventDefault(); bdrop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => bdrop.addEventListener(ev, e => { e.preventDefault(); bdrop.classList.remove("over"); }));
+bdrop.addEventListener("drop", e => handleBankFiles([...e.dataTransfer.files]));
+
+// ---------- Todas las cuentas: movimientos unificados ----------
+const normC = s => String(s||"").toLowerCase().replace(/\s+/g," ").trim().slice(0,40);
+const dkey = f => { const m = String(f).match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? +(m[3]+m[2]+m[1]) : 0; };
+const kDays = k => Date.UTC(Math.floor(k/1e4), Math.floor(k/100)%100-1, k%100)/864e5;
+const kFmt = k => k ? `${String(k%100).padStart(2,"0")}/${String(Math.floor(k/100)%100).padStart(2,"0")}/${Math.floor(k/1e4)}` : "";
+const fileYear = txt => { const c = {}; for (const m of String(txt).matchAll(/\b(20\d{2})\b/g)) c[m[1]] = (c[m[1]]||0)+1; const b = Object.entries(c).sort((a,b)=>b[1]-a[1])[0]; return b ? +b[0] : curYear; };
+// Solo se guardan los 4 últimos dígitos del IBAN, para distinguir cuentas del mismo banco
+const acctOf = (bank, text) => { const m = String(text).match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){4,7}(?: ?[A-Z0-9]{1,3})?\b/); return bank + (m ? " ···" + m[0].replace(/\s/g,"").slice(-4) : ""); };
+
+function allFromItems(rawLines, defY){
+  let cols = null, last = null; const out = [];
+  const SKIP = /saldo (inicial|final|anterior|a fecha|al )|^\s*total|resumen|p[aá]gina \d|page \d/i;
+  for (const items of rawLines){
+    const text = items.map(i => i[2]).join("  ");
+    const h = headerCols(items, text); if (h){ cols = h; last = null; continue; }
+    const am = lineAmounts(items);
+    const head = items.slice(0,2).map(i => i[2]).join(" ");
+    const fecha = getDate(head, defY);
+    if (!fecha){
+      if (!/[a-záéíóúñ]{3,}/i.test(text)) continue; // líneas solo con números (p. ej. el año bajo la fecha)
+      if (last && !am.length && text.length<70 && last.concepto.length<70 && !/p[aá]gina|page|iban|bic|saldo|fecha|trade republic|ibercaja|openbank/i.test(text)) last.concepto = (last.concepto+" "+cleanConcept(text)).trim();
+      else last = null;
+      continue;
+    }
+    if (!am.length || SKIP.test(text)){ last = null; continue; }
+    const p = pickAmount(am, cols);
+    last = { fecha, concepto: cleanConcept(text) || "Movimiento", importe: p.dudoso ? 0 : p.n, saldo: p.dudoso ? p.n : p.saldo, dudoso: p.dudoso || undefined };
+    out.push(last);
+  }
+  return out;
+}
+function allFromTable(tab, defY){
+  const c = tableCols(tab); if (!c) return [];
+  const out = [];
+  for (const r of tab.slice(c.hi+1)){
+    const fecha = getDate(c.cF>=0 ? r[c.cF] : r.join(" "), defY); if (!fecha) continue;
+    const imp = rowAmount(r, c); if (isNaN(imp)) continue;
+    const s = c.cSaldo>=0 ? parseAny(r[c.cSaldo]) : NaN;
+    out.push({ fecha, concepto: String(c.cTxt>=0 ? r[c.cTxt] : cleanConcept(r.join(" "))).trim().slice(0,120) || "Movimiento", importe:imp, saldo: isNaN(s) ? null : s });
+  }
+  return out;
+}
+// Detecta si el extracto va de más antiguo a más reciente o al revés, usando el saldo de cada línea
+function orderFile(movs){
+  let asc = 0, desc = 0;
+  for (let i=1; i<movs.length; i++){
+    const a = movs[i-1], b = movs[i];
+    if (a.saldo!=null && b.saldo!=null){
+      if (Math.abs(a.saldo + b.importe - b.saldo) < 0.015) asc++;
+      if (Math.abs(b.saldo + a.importe - a.saldo) < 0.015) desc++;
+    }
+    const ka = dkey(a.fecha), kb = dkey(b.fecha);
+    if (kb>ka) asc += 0.5; else if (kb<ka) desc += 0.5;
+  }
+  const rev = desc > asc;
+  movs.forEach((m, i) => m.seq = rev ? movs.length-1-i : i);
+}
+
+function unified(){
+  const all = state.bank.all || []; if (!all.length) return null;
+  const alias = state.bank.alias || {};
+  const fi = new Map(state.bank.files.map((f,i) => [f.name, i]));
+  const list = all.map((m,i) => ({...m, ac:(alias[m.acct]||"").trim() || m.acct, k:dkey(m.fecha), fi:fi.get(m.file) ?? 999, i}));
+  list.sort((a,b) => a.k-b.k || a.fi-b.fi || (a.seq??0)-(b.seq??0) || a.i-b.i);
+  const by = {};
+  for (const m of list) (by[m.ac] = by[m.ac] || []).push(m);
+  const open = {};
+  for (const [a, ms] of Object.entries(by)){
+    const f = ms.findIndex(m => m.saldo!=null);
+    if (f<0){ ms.forEach(m => m.bal = null); open[a] = null; continue; }
+    let bal = ms[f].saldo;
+    for (let i=f; i<ms.length; i++){ const m = ms[i]; bal = m.saldo!=null ? m.saldo : bal + m.importe; m.bal = bal; }
+    bal = ms[f].saldo - ms[f].importe;
+    for (let i=f-1; i>=0; i--){ ms[i].bal = bal; bal -= ms[i].importe; }
+    open[a] = bal;
+  }
+  const cur = {...open};
+  for (const m of list){ if (m.bal!=null) cur[m.ac] = m.bal; m.total = Object.values(cur).reduce((t,v) => t+(v||0), 0); }
+  // Traspasos entre tus propias cuentas: mismo importe con signo contrario, en cuentas distintas, con 3 días de margen como mucho
+  let nTr = 0;
+  if (Object.keys(by).length>1){
+    for (const m of list){
+      if (m.importe>=0 || m.tr) continue;
+      const tw = list.find(o => !o.tr && o.ac!==m.ac && o.importe>0 && Math.abs(o.importe + m.importe)<0.005 && Math.abs(kDays(o.k)-kDays(m.k))<=3);
+      if (tw){ m.tr = tw.tr = true; nTr++; }
+    }
+  }
+  const accts = Object.entries(by).map(([a, ms]) => {
+    const withBal = ms.filter(m => m.bal!=null), lastM = withBal[withBal.length-1];
+    return { name:a, keys:[...new Set(ms.map(m => m.acct))], n:ms.length, bal: lastM ? lastM.bal : null, fecha: lastM ? lastM.fecha : ms[ms.length-1].fecha };
+  });
+  return { list, accts, open, nTr };
+}
+
+let uf = { acct:"", scope:"year", order:"desc", text:"", tr:false, limit:200 };
+const niceStep = raw => { const mag = Math.pow(10, Math.floor(Math.log10(raw||1))); return [1,2,2.5,5,10].map(x => x*mag).find(x => x>=raw) || mag*10; };
+function drawSaldo(points){
+  const svg = $("ballChart");
+  if (points.length<2){ svg.innerHTML = `<text x="330" y="100" text-anchor="middle" font-size="13" fill="var(--muted)">Hace falta más de un día con saldo para dibujar la evolución</text>`; return; }
+  const W=660, H=210, L=78, R=14, T=14, B=28, iw=W-L-R, ih=H-T-B;
+  const x0 = kDays(points[0].k), x1 = kDays(points[points.length-1].k);
+  let lo = Math.min(...points.map(p=>p.total)), hi = Math.max(...points.map(p=>p.total));
+  if (hi-lo<1){ hi += 50; lo -= 50; }
+  const step = niceStep((hi-lo)/4); lo = Math.floor(lo/step)*step; hi = Math.ceil(hi/step)*step;
+  const X = k => L + (kDays(k)-x0)/((x1-x0)||1)*iw, Y = v => T + ih - (v-lo)/((hi-lo)||1)*ih;
+  let g = "";
+  for (let v=lo; v<=hi+1e-6; v+=step){
+    g += `<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/>`;
+    g += `<text x="${L-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" font-family="IBM Plex Mono, monospace" fill="var(--muted)">${fmt(v,0)}</text>`;
+  }
+  let d = `M${X(points[0].k)},${Y(points[0].total)}`;
+  for (let i=1; i<points.length; i++) d += ` H${X(points[i].k)} V${Y(points[i].total)}`;
+  const area = d + ` V${T+ih} H${X(points[0].k)} Z`;
+  g += `<path d="${area}" fill="var(--accent)" fill-opacity="0.12"/>`;
+  g += `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+  const lp = points[points.length-1];
+  g += `<circle cx="${X(lp.k)}" cy="${Y(lp.total)}" r="4" fill="var(--accent)"/>`;
+  const mid = points[Math.floor(points.length/2)];
+  const ticks = [points[0], (X(mid.k)-X(points[0].k)>110 && X(lp.k)-X(mid.k)>110) ? mid : null, lp];
+  ticks.forEach((p,i) => { if (p) g += `<text x="${X(p.k)}" y="${H-8}" text-anchor="${i===0?"start":i===2?"end":"middle"}" font-size="11" font-family="IBM Plex Mono, monospace" fill="var(--muted)">${kFmt(p.k)}</text>`; });
+  svg.innerHTML = g;
+}
+function renderUnified(){
+  const u = unified();
+  $("ballEmpty").hidden = !!u; $("ballBody").hidden = !u;
+  $("fScope").options[0].textContent = `Solo ${curYear}`;
+  if (!u){ $("ubody").innerHTML = `<tr><td class="l" colspan="6">Sin movimientos todavía.</td></tr>`; $("uMore").hidden = true; $("ballCount").textContent = ""; return; }
+  const y0 = curYear*10000+101, y1 = curYear*10000+1231;
+  const inYear = u.list.filter(m => m.k>=y0 && m.k<=y1);
+  const before = u.list.filter(m => m.k<y0).pop();
+  const startT = before ? before.total : Object.values(u.open).reduce((t,v) => t+(v||0), 0);
+  const lastAll = u.list[u.list.length-1];
+  const ent = inYear.filter(m => m.importe>0 && !m.tr).reduce((t,m) => t+m.importe, 0);
+  const sal = inYear.filter(m => m.importe<0 && !m.tr).reduce((t,m) => t+m.importe, 0);
+  const endT = inYear.length ? inYear[inYear.length-1].total : startT;
+  const tile = (k,v,cls="") => `<div class="bk"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
+  $("ballTiles").innerHTML = tile(`Saldo total a ${lastAll.fecha}`, eur(lastAll.total))
+    + tile(`Saldo a 1 de enero de ${curYear}`, eur(startT))
+    + tile(`Entradas en ${curYear}`, eur(ent), "pos") + tile(`Salidas en ${curYear}`, eur(Math.abs(sal)), "neg")
+    + tile(`Variación en ${curYear}`, (endT-startT>=0?"+":"")+eur(endT-startT), endT-startT>=0?"pos":"neg");
+  const sinSaldo = u.accts.filter(a => a.bal==null).map(a => a.name);
+  $("ballHint").textContent = [u.nTr ? `${u.nTr} traspasos entre tus cuentas no cuentan como entradas ni salidas` : "", sinSaldo.length ? `${sinSaldo.join(", ")} no trae saldo en el extracto y no se suma` : ""].filter(Boolean).join(" · ");
+  const alias = state.bank.alias || {};
+  $("ballAccts").innerHTML = u.accts.map((a,i) => `<tr><td class="l">${a.keys.map(esc).join("<br>")}</td>
+    <td class="l"><input type="text" class="alias" id="alias-${i}" data-ai="${i}" value="${esc(alias[a.keys[0]]||"")}" placeholder="${esc(a.name)}" aria-label="Nombre de la cuenta"></td>
+    <td class="num">${a.n}</td><td class="num">${a.bal==null?"—":fmt(a.bal)}</td><td class="l num">${esc(a.fecha)}</td></tr>`).join("")
+    + `<tr class="sum"><td class="l" colspan="3"><strong>Total</strong></td><td class="num"><strong>${fmt(u.accts.reduce((t,a)=>t+(a.bal||0),0))}</strong></td><td></td></tr>`;
+  $("ballAccts").dataset.keys = JSON.stringify(u.accts.map(a => a.keys));
+  // Gráfico
+  const scoped = uf.scope==="year" ? inYear : u.list;
+  const pts = []; if (uf.scope==="year" && before) pts.push({k:y0, total:startT});
+  for (const m of scoped){ if (pts.length && pts[pts.length-1].k===m.k) pts[pts.length-1].total = m.total; else pts.push({k:m.k, total:m.total}); }
+  drawSaldo(pts);
+  // Filtros
+  const fa = $("fAcct"), names = u.accts.map(a => a.name);
+  if (uf.acct && !names.includes(uf.acct)) uf.acct = "";
+  fa.innerHTML = `<option value="">Todas las cuentas</option>` + names.map(n => `<option value="${esc(n)}"${n===uf.acct?" selected":""}>${esc(n)}</option>`).join("");
+  const q = normC(uf.text);
+  let rows = scoped.filter(m => (!uf.acct || m.ac===uf.acct) && (!uf.tr || !m.tr) && (!q || normC(m.concepto).includes(q) || m.concepto.toLowerCase().includes(uf.text.toLowerCase())));
+  if (uf.order==="desc") rows = rows.slice().reverse();
+  $("ballCount").textContent = `${rows.length} movimientos`;
+  const fiscal = c => { const t = classify(c); return t && t!=="otro" && t!=="venta" ? `<span class="chip ok">${TIPOS[t]}</span>` : ""; };
+  $("ubody").innerHTML = rows.slice(0, uf.limit).map(m => `<tr${m.tr?' class="trf"':""}>
+    <td class="l num">${esc(m.fecha)}</td><td class="l">${esc(m.ac)}</td>
+    <td class="l cpt">${esc(m.concepto)} ${fiscal(m.concepto)}${m.tr?' <span class="chip ej">Traspaso</span>':""}${m.dudoso?' <span class="chip rev">Revisar importe</span>':""}</td>
+    <td class="num ${m.importe>=0?"pos":"neg"}">${m.importe>0?"+":""}${fmt(m.importe)}</td>
+    <td class="num">${m.bal==null?"—":fmt(m.bal)}</td><td class="num"><strong>${fmt(m.total)}</strong></td></tr>`).join("")
+    || `<tr><td class="l" colspan="6">Ningún movimiento con estos filtros.</td></tr>`;
+  $("uMore").hidden = rows.length <= uf.limit;
+  $("uMore").textContent = `Ver ${Math.min(200, rows.length-uf.limit)} más`;
+}
+$("fAcct").onchange = e => { uf.acct = e.target.value; uf.limit = 200; renderUnified(); };
+$("fScope").onchange = e => { uf.scope = e.target.value; uf.limit = 200; renderUnified(); };
+$("fOrder").onchange = e => { uf.order = e.target.value; renderUnified(); };
+$("fText").oninput = e => { uf.text = e.target.value; uf.limit = 200; renderUnified(); };
+$("fTr").onchange = e => { uf.tr = e.target.checked; uf.limit = 200; renderUnified(); };
+$("uMore").onclick = () => { uf.limit += 200; renderUnified(); };
+$("ballAccts").addEventListener("change", e => {
+  const i = e.target.dataset.ai; if (i==null) return;
+  const keys = JSON.parse($("ballAccts").dataset.keys||"[]")[+i] || [];
+  state.bank.alias = state.bank.alias || {};
+  for (const k of keys){ if (e.target.value.trim()) state.bank.alias[k] = e.target.value.trim(); else delete state.bank.alias[k]; }
+  save(); render();
+});
+$("bfiles").addEventListener("click", e => {
+  const b = e.target.closest("[data-fdel]"); if (!b) return;
+  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Quitar?"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
+  const f = state.bank.files[+b.dataset.fdel]; if (!f) return;
+  state.bank.rows = state.bank.rows.filter(r => r.file!==f.name);
+  state.bank.all = (state.bank.all||[]).filter(m => m.file!==f.name);
+  state.bank.files = state.bank.files.filter(x => x!==f);
+  save(); render();
+});
+let bview = "fiscal";
+try { bview = localStorage.getItem("miRenta:bview") || "fiscal"; } catch(e){}
+function showBView(v){
+  bview = v==="todos" ? "todos" : "fiscal";
+  document.querySelectorAll("[data-bview]").forEach(s => s.hidden = s.dataset.bview!==bview);
+  document.querySelectorAll("[data-bview-btn]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.bviewBtn===bview)));
+  try { localStorage.setItem("miRenta:bview", bview); } catch(e){}
+}
+document.querySelectorAll("[data-bview-btn]").forEach(b => b.onclick = () => showBView(b.dataset.bviewBtn));
+showBView(bview);
+
+// ---------- Inversiones: cartera a 31/12, ventas del año y staking ----------
+const TIPO_INV = {acc:"Acción o ETF", fondo:"Fondo", cripto:"Cripto", dep:"Depósito", otro:"Otro"};
+const fmtQ = n => n==null || n==="" ? "" : Number(n).toLocaleString("es-ES", {maximumFractionDigits:8});
+const optsT = (cur, keys) => keys.map(k => `<option value="${k}"${k===cur?" selected":""}>${TIPO_INV[k]}</option>`).join("");
+function renderInv(c){
+  const s = state.settings, cart = s.cartera||[], ven = s.ventas||[];
+  $("cntInv").textContent = (cart.length + ven.length) || "";
+  const cb = $("cartBody"), vb = $("ventBody");
+  if (!cb.contains(document.activeElement)) cb.innerHTML = cart.length ? cart.map(it => `<tr>
+    <td class="l"><input type="text" id="c-${it.id}-nombre" data-cid="${it.id}" data-ck="nombre" value="${esc(it.nombre||"")}" placeholder="Iberdrola, Bitcoin…" aria-label="Nombre" style="width:170px">${it.src?`<span class="fname">${esc(it.src)}${it.fecha?" · "+esc(it.fecha):""}</span>`:""}</td>
+    <td class="l"><select id="c-${it.id}-tipo" data-cid="${it.id}" data-ck="tipo" aria-label="Tipo">${optsT(it.tipo, ["acc","fondo","cripto","dep","otro"])}</select></td>
+    <td class="l"><input type="text" id="c-${it.id}-ent" data-cid="${it.id}" data-ck="entidad" value="${esc(it.entidad||"")}" placeholder="Entidad" aria-label="Entidad" style="width:120px"></td>
+    <td><input class="money" type="text" inputmode="decimal" id="c-${it.id}-qty" data-cid="${it.id}" data-ck="qty" value="${fmtQ(it.qty)}" aria-label="Cantidad"></td>
+    <td><input class="money" type="text" inputmode="decimal" id="c-${it.id}-precio" data-cid="${it.id}" data-ck="precio" value="${it.precio==null?"":fmt(it.precio)}" aria-label="Precio"></td>
+    <td class="num">${fmt(valOf(it))}</td>
+    <td class="l"><input type="checkbox" id="c-${it.id}-ext" data-cid="${it.id}" data-ck="ext"${it.ext?" checked":""} aria-label="En entidad extranjera"></td>
+    <td class="l"><button type="button" class="ghost" data-cdel="${it.id}" aria-label="Quitar">✕</button></td></tr>`).join("")
+    : `<tr><td class="l" colspan="8"><div class="empty">Añade tus acciones, fondos, criptomonedas y depósitos con lo que tengas a 31 de diciembre.</div></td></tr>`;
+  const tot = k => cart.filter(i => i.tipo===k).reduce((t,i) => t+valOf(i), 0);
+  $("cartTot").innerHTML = Object.keys(TIPO_INV).filter(k => tot(k)).map(k => `<div class="bk"><div class="k">${TIPO_INV[k]}</div><div class="v">${eur(tot(k))}</div></div>`).join("")
+    + `<div class="bk"><div class="k">Total cartera</div><div class="v">${eur(cart.reduce((t,i)=>t+valOf(i),0))}</div></div>`;
+  if (!vb.contains(document.activeElement)) vb.innerHTML = ven.length ? ven.map(v => { const r = (v.venta||0)-(v.coste||0); return `<tr>
+    <td class="l"><input type="text" id="v-${v.id}-nombre" data-vid="${v.id}" data-vk="nombre" value="${esc(v.nombre||"")}" placeholder="Qué vendiste" aria-label="Activo" style="width:150px"></td>
+    <td class="l"><select id="v-${v.id}-tipo" data-vid="${v.id}" data-vk="tipo" aria-label="Tipo">${optsT(v.tipo, ["acc","fondo","cripto","otro"])}</select></td>
+    <td class="l"><input type="text" id="v-${v.id}-fecha" data-vid="${v.id}" data-vk="fecha" value="${esc(v.fecha||"")}" placeholder="dd/mm/aaaa" aria-label="Fecha" style="width:100px"></td>
+    <td><input class="money" type="text" inputmode="decimal" id="v-${v.id}-venta" data-vid="${v.id}" data-vk="venta" value="${v.venta==null?"":fmt(v.venta)}" aria-label="Importe de venta"></td>
+    <td><input class="money" type="text" inputmode="decimal" id="v-${v.id}-coste" data-vid="${v.id}" data-vk="coste" value="${v.coste==null?"":fmt(v.coste)}" aria-label="Coste de compra"></td>
+    <td class="num ${r>=0?"pos":"neg"}">${r>0?"+":""}${fmt(r)}</td>
+    <td class="l"><button type="button" class="ghost" data-vdel="${v.id}" aria-label="Quitar">✕</button></td></tr>`; }).join("")
+    : `<tr><td class="l" colspan="7"><div class="empty">Si en ${curYear} vendiste acciones, fondos o cripto (o cambiaste una cripto por otra), añade cada venta aquí.</div></td></tr>`;
+  const g = ven.filter(v => (v.venta||0)-(v.coste||0) > 0).reduce((t,v)=>t+(v.venta||0)-(v.coste||0),0);
+  const p = ven.filter(v => (v.venta||0)-(v.coste||0) < 0).reduce((t,v)=>t+(v.venta||0)-(v.coste||0),0);
+  $("ventTot").innerHTML = `<div class="row"><span>Ganancias</span><span class="pos">${eur(g)}</span></div><div class="row"><span>Pérdidas</span><span class="neg">${eur(p)}</span></div><div class="row tot"><span>Resultado que pasa al ahorro</span><span>${eur(g+p)}</span></div>`;
+}
+function invChange(listKey, idKey, kKey){
+  return e => {
+    const el = e.target, id = el.dataset[idKey], k = el.dataset[kKey]; if (!id) return;
+    const it = (state.settings[listKey]||[]).find(x => x.id===id); if (!it) return;
+    if (k==="ext") it.ext = el.checked;
+    else if (["nombre","tipo","entidad","fecha"].includes(k)) it[k] = el.value;
+    else { const v = parseEs(el.value); it[k] = v==null ? null : (k==="qty" || k==="precio" ? Math.max(0, v) : Math.abs(v)); if (k==="qty" || k==="precio") delete it.valor; }
+    el.blur(); save(); render();
+  };
+}
+$("cartBody").addEventListener("change", invChange("cartera", "cid", "ck"));
+$("ventBody").addEventListener("change", invChange("ventas", "vid", "vk"));
+const armDel = (b, listKey, attr) => {
+  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Quitar?"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
+  state.settings[listKey] = (state.settings[listKey]||[]).filter(x => x.id!==b.dataset[attr]); save(); render();
+};
+$("cartBody").addEventListener("click", e => { const b = e.target.closest("[data-cdel]"); if (b) armDel(b, "cartera", "cdel"); });
+$("ventBody").addEventListener("click", e => { const b = e.target.closest("[data-vdel]"); if (b) armDel(b, "ventas", "vdel"); });
+$("cartAdd").onclick = () => { normInm(); state.settings.cartera.push({id:uid(), nombre:"", tipo:"acc", entidad:"", qty:null, precio:null, ext:false}); save(); render(); };
+$("ventAdd").onclick = () => { normInm(); state.settings.ventas.push({id:uid(), nombre:"", tipo:"acc", fecha:"", venta:null, coste:null}); save(); render(); };
+
+// ---------- Patrimonio a 31/12 ----------
+function patrimonio(){
+  const s = state.settings, y1 = curYear*10000+1231;
+  // Cuentas: último saldo de cada cuenta en Bancos; si un extracto de patrimonio de la misma entidad es igual o más reciente, manda su efectivo
+  let cuentasAuto = null, cuentasFecha = "";
+  const accs = [], u = unified();
+  if (u) for (const a of u.accts){ let lm = null; for (const m of u.list) if (m.ac===a.name && m.k<=y1 && m.bal!=null) lm = m; if (lm) accs.push({name:a.name, keys:a.keys, bal:lm.bal, k:lm.k}); }
+  const used = new Set(), cSrc = []; let tot = 0, any = false;
+  for (const d of (s.patDocs||[])){
+    if (d.efectivo==null) continue;
+    const dk = dkey(d.fecha); if (dk && dk>y1) continue;
+    const match = accs.filter(a => a.keys.some(k => k.startsWith(d.entidad)));
+    if (match.every(a => a.k <= dk)){ match.forEach(a => used.add(a)); tot += d.efectivo; any = true; cSrc.push(`${d.entidad} a ${d.fecha}`); }
+  }
+  for (const a of accs) if (!used.has(a)){ tot += a.bal; any = true; cSrc.push(`${a.name} a ${kFmt(a.k)}`); }
+  if (any){ cuentasAuto = tot; cuentasFecha = cSrc.join(" · "); }
+  const cuentas = s.pCuentas ? s.pCuentas : (cuentasAuto||0);
+  const cart = s.cartera||[];
+  const byT = k => cart.filter(i => i.tipo===k).reduce((t,i) => t+valOf(i), 0);
+  const extT = ks => cart.filter(i => i.ext && ks.includes(i.tipo)).reduce((t,i) => t+valOf(i), 0);
+  const inmV = (s.inmuebles||[]).reduce((t,m) => t + (m.valor||0)*((m.pct==null?100:m.pct)/100), 0);
+  const parts = [
+    ["Cuentas bancarias", cuentas, "var(--p1)", s.pCuentas ? "Dato manual" : cuentasAuto!=null ? cuentasFecha : "Sin datos"],
+    ["Depósitos", byT("dep"), "var(--p2)", "Inversiones"],
+    ["Acciones y ETF", byT("acc"), "var(--p3)", "Inversiones"],
+    ["Fondos", byT("fondo"), "var(--p4)", "Inversiones"],
+    ["Criptomonedas", byT("cripto"), "var(--p5)", "Inversiones"],
+    ["Otros activos financieros", byT("otro"), "var(--p6)", "Inversiones"],
+    ["Inmuebles alquilados", inmV, "var(--p7)", "Inmuebles"],
+    ["Vivienda habitual", s.pVivienda||0, "var(--p8)", "Dato manual"],
+    ["Plan de pensiones", s.pPlan||0, "var(--p9)", "Plan de pensiones · valor actual"],
+    ["Otros bienes", s.pOtros||0, "var(--p10)", "Dato manual"]
+  ];
+  const bienes = parts.reduce((t,p) => t+p[1], 0), deudas = Math.max(0, s.pDeudas||0);
+  const exViv = Math.min(s.pVivienda||0, 300000);
+  const baseIP = Math.max(0, bienes - exViv - deudas), baseLiq = Math.max(0, baseIP - 700000);
+  return { parts, bienes, deudas, neto: bienes - deudas, exViv, baseIP, baseLiq, cuentasAuto, cuentasFecha,
+    extCuentas: Math.max(0, s.pExtCuentas||0) + extT(["dep"]), extValores: extT(["acc","fondo","otro"]), extCripto: extT(["cripto"]), anyExt: cart.some(i => i.ext) || (s.pExtCuentas||0)>0,
+    donac: Math.max(0, s.pDonac||0) };
+}
+function renderPat(){
+  renderPatDocs();
+  const sp = state.settings;
+  $("planRest").textContent = sp.pPlan && sp.resc>0 ? `Se suma a tu patrimonio neto. Si rescatas ${eur(sp.resc)}, en el plan quedarán ${eur(Math.max(0, sp.pPlan - sp.resc))} y el resto pasará a tu cuenta.` : "Se suma a tu patrimonio neto.";
+  const p = patrimonio(), y = curYear;
+  $("patNeto").textContent = eur(p.neto);
+  $("patSub").textContent = `Bienes ${eur(p.bienes)} · deudas ${eur(p.deudas)}`;
+  const vis = p.parts.filter(x => x[1]>0.005);
+  $("patBar").innerHTML = p.bienes>0 ? vis.map(([k,v,col]) => `<i style="width:${v/p.bienes*100}%;background:${col}" title="${k}: ${eur(v)}"></i>`).join("") : "";
+  $("patLeg").innerHTML = vis.map(([k,v,col]) => `<span><i style="background:${col}"></i>${k} ${fmt(v/p.bienes*100,1)} %</span>`).join("");
+  $("patBody").innerHTML = p.parts.map(([k,v,col,src]) => `<tr${v>0.005?"":' class="zero"'}><td class="l"><i class="dot" style="background:${col}"></i>${k}</td><td class="l hint">${src}</td><td class="num">${fmt(v)}</td></tr>`).join("")
+    + `<tr><td class="l">Deudas pendientes</td><td class="l hint">Dato manual</td><td class="num neg">−${fmt(p.deudas)}</td></tr>`
+    + `<tr class="sum"><td class="l" colspan="2"><strong>Patrimonio neto a 31/12/${y}</strong></td><td class="num"><strong>${fmt(p.neto)}</strong></td></tr>`;
+  $("pCuentasHint").textContent = p.cuentasAuto!=null ? `De tus extractos: ${eur(p.cuentasAuto)} (${p.cuentasFecha}). Déjalo vacío para usar ese dato.` : "Sube los extractos en Bancos o escribe aquí el saldo de tus cuentas a 31/12.";
+  const item = (ok, title, text) => `<li><span class="chip ${ok?"ok":"rev"}">${ok?"OK":"Atención"}</span><div><strong>${title}</strong><p>${text}</p></div></li>`;
+  const L = [];
+  if (p.donac) L.push(item(true, "Donaciones recibidas: no van en la renta", `Los ${eur(p.donac)} donados tributan en Sucesiones y Donaciones (Modelo 651, ya presentado) y no se declaran en el IRPF. Sí forman parte de tu patrimonio, dentro del saldo de tus cuentas, así que no se suman aparte.`));
+  if (p.bienes > 2000000) L.push(item(false, "Impuesto sobre el Patrimonio: tienes que presentarlo", `Tus bienes superan 2.000.000 €, así que hay que presentar la declaración aunque en Madrid la bonificación del 100 % deje la cuota a 0. Plazo: de abril a junio de ${y+1}, junto con la renta.`));
+  else if (p.baseLiq > 0) L.push(item(true, "Impuesto sobre el Patrimonio: cuota 0", `Tu base liquidable sería de ${eur(p.baseLiq)}, pero en Madrid la bonificación del 100 % deja la cuota a 0 y, con bienes por debajo de 2.000.000 €, no tienes que presentarlo.`));
+  else L.push(item(true, "Impuesto sobre el Patrimonio: no te afecta", `Con ${eur(p.baseIP)} de base imponible (bienes menos deudas y la vivienda habitual hasta 300.000 €) quedas por debajo del mínimo exento de 700.000 €.`));
+  L.push(p.baseLiq > 3000000 ? item(false, "Grandes Fortunas: revísalo con un asesor", `Tu base liquidable supera 3.000.000 €, el umbral del Impuesto Temporal de Solidaridad de las Grandes Fortunas.`) : item(true, "Grandes Fortunas: no te afecta", "Solo se paga con una base liquidable de más de 3.000.000 €."));
+  const lim = 50000, i720 = [];
+  if (p.extCuentas > lim) i720.push(`cuentas y depósitos (${eur(p.extCuentas)})`);
+  if (p.extValores > lim) i720.push(`valores y fondos (${eur(p.extValores)})`);
+  if (i720.length) L.push(item(false, "Modelo 720: bienes en el extranjero", `Superas 50.000 € en ${i720.join(" y en ")} en entidades extranjeras. Se presenta del 1 de enero al 31 de marzo de ${y+1}.`));
+  if (p.extCripto > lim) L.push(item(false, "Modelo 721: cripto en el extranjero", `Tienes ${eur(p.extCripto)} en criptomonedas custodiadas por entidades extranjeras. Se presenta del 1 de enero al 31 de marzo de ${y+1}.`));
+  if (!i720.length && !(p.extCripto > lim)) L.push(item(true, "Modelos 720 y 721: no hacen falta", p.anyExt ? "Lo que tienes en entidades extranjeras no pasa de 50.000 € por bloque." : "Marca en Inversiones lo que tengas en entidades extranjeras (por ejemplo, un exchange de cripto) para comprobarlo. La información fiscal de cada entidad indica si cuenta como extranjera."));
+  $("patChecks").innerHTML = L.join("");
+}
+
+// ---------- Extractos de patrimonio (p. ej. «Extracto del patrimonio neto» de Trade Republic) ----------
+const valOf = i => i.valor!=null ? i.valor : (i.qty||0)*(i.precio||0);
+const IS_AMT = t => /^-?[\d.]+,\d{1,6}(\s*EUR)?$|^-?\d+\.\d{1,2}(\s*EUR)?$/i.test(String(t).trim());
+function parsePatDoc(lines, fname){
+  const T = l => l.map(i => String(i[2]).trim()).filter(Boolean);
+  const all = lines.map(l => T(l).join("  ")).join("\n");
+  const entidad = bankOf(fname, all);
+  let fecha = "";
+  for (const l of lines){ const t = T(l).join(" "); if (/^a \d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/i.test(t) || /^a \d{1,2} de /i.test(t)){ fecha = getDate(t); break; } }
+  if (!fecha){ const f = lines.find(l => /^fecha$/i.test(T(l)[0]||"")); if (f) fecha = getDate(T(f).join(" ")); }
+  let sec = null, cur = null, efectivo = null, total = null, resumenEf = null;
+  const pos = [];
+  for (const l of lines){
+    const t = T(l); if (!t.length) continue;
+    const one = t.length===1 ? t[0].toLowerCase() : "";
+    if (one && /^(wallet crypto|cripto|criptoactivos|crypto)/.test(one)){ sec = "cripto"; cur = null; continue; }
+    if (one && /^(cuenta de valores|valores|acciones|fondos|etf)/.test(one)){ sec = /fondos/.test(one) ? "fondo" : "acc"; cur = null; continue; }
+    if (one && /^(efectivo|liquidez|cuentas?)$/.test(one)){ sec = "cash"; cur = null; continue; }
+    if (/^total$/i.test(t[0]) && t.length>=2 && IS_AMT(t[t.length-1])){ total = parseAny(t[t.length-1]); continue; }
+    if (!sec && /^efectivo$/i.test(t[0]) && t.length>=2 && IS_AMT(t[t.length-1])){ resumenEf = parseAny(t[t.length-1]); continue; }
+    if (sec==="cash"){
+      if (/cuenta|efectivo|saldo|balance/i.test(t[0]) && IS_AMT(t[t.length-1]) && t.length>=2){ efectivo = (efectivo||0) + parseAny(t[t.length-1]); }
+      continue;
+    }
+    if (sec==="acc" || sec==="fondo" || sec==="cripto"){
+      // Línea de posición: cantidad · nombre · precio · valor
+      if (t.length>=4 && /^[\d.]+(,\d+)?(\s*(unidades|uds\.?|participaciones|títulos))?$/i.test(t[0]) && IS_AMT(t[t.length-1]) && IS_AMT(t[t.length-2])){
+        const nombre = t.slice(1, -2).filter(x => !/^unidades$/i.test(x)).join(" ").trim();
+        const tipo = sec==="acc" && /\bfund\b|fondo|\bfi\b/i.test(nombre) ? "fondo" : sec;
+        cur = { nombre, tipo, qty: parseAny(t[0].replace(/[a-zñ.\s]+$/i, "")), precio: parseAny(t[t.length-2]), valor: parseAny(t[t.length-1]) };
+        pos.push(cur); continue;
+      }
+      if (!cur) continue;
+      const line = t.join(" ");
+      const isin = line.match(/ISIN:?\s*([A-Z]{2}[A-Z0-9]{9}\d)/); if (isin){ cur.isin = isin[1]; continue; }
+      const cust = line.match(/pa[ií]s de custodia:?\s*(.+)$/i); if (cust){ cur.custodia = cust[1].trim(); continue; }
+      if (cur.tipo==="cripto" && !cur.ticker){ const tk = t.find(x => /^[A-Z0-9]{2,10}$/.test(x)); if (tk) cur.ticker = tk; }
+    }
+  }
+  if (efectivo==null && resumenEf!=null) efectivo = resumenEf;
+  return { entidad, fecha, pos, efectivo, total };
+}
+async function handlePatFiles(list){
+  const st = $("pstatus"), msgs = [];
+  for (const f of list){
+    st.textContent = "Leyendo "+f.name+"…";
+    try {
+      if (!window.pdfjsLib) throw new Error("el lector de PDF no ha cargado; recarga la página");
+      const d = parsePatDoc(await pdfLines(await f.arrayBuffer()), f.name);
+      if (!d.pos.length && d.efectivo==null){ msgs.push(`En ${f.name} no he encontrado posiciones ni efectivo. ¿Es un extracto de patrimonio o de cartera?`); continue; }
+      normInm();
+      const s = state.settings, ent = d.entidad;
+      s.cartera = s.cartera.filter(i => i.src!==ent);
+      for (const p of d.pos) s.cartera.push({ id:uid(), nombre: p.nombre + (p.ticker ? ` (${p.ticker})` : ""), tipo:p.tipo, entidad:ent, qty:p.qty, precio:p.precio, valor:p.valor,
+        ext: !!(p.custodia && !/espa[ñn]a/i.test(p.custodia)), isin:p.isin, src:ent, fecha:d.fecha });
+      s.patDocs = (s.patDocs||[]).filter(x => x.entidad!==ent).concat({ entidad:ent, fecha:d.fecha, file:f.name, n:d.pos.length, efectivo:d.efectivo, total:d.total });
+      const sum = d.pos.reduce((t,p) => t+(p.valor||0), 0) + (d.efectivo||0);
+      if (d.total!=null && Math.abs(sum - d.total) > 0.05) msgs.push(`${f.name}: la suma leída (${eur(sum)}) no coincide con el total del extracto (${eur(d.total)}). Revisa las posiciones en Inversiones.`);
+      const y = yearOf(d.fecha); if (y && y!==curYear) msgs.push(`${f.name} es de ${y} y tienes abierto ${curYear}: lo he guardado en ${curYear}.`);
+    } catch(e){ msgs.push(`No he podido leer ${f.name}: ${e.message}.`); }
+  }
+  st.textContent = msgs.join(" ");
+  save(); render();
+}
+function renderPatDocs(){
+  const docs = state.settings.patDocs||[];
+  $("pdocs").innerHTML = docs.length ? docs.map((d,i) => `<tr><td class="l"><strong>${esc(d.entidad)}</strong><span class="fname">${esc(d.file||"")}</span></td><td class="l num">${esc(d.fecha||"—")}</td><td class="num">${d.n}</td><td class="num">${d.efectivo==null?"—":fmt(d.efectivo)}</td><td class="num">${d.total==null?"—":fmt(d.total)}</td><td class="l"><button type="button" class="ghost" data-pdel="${i}" aria-label="Quitar extracto">✕</button></td></tr>`).join("")
+    : `<tr><td class="l" colspan="6">Todavía no has subido ningún extracto de patrimonio.</td></tr>`;
+  const y1 = curYear*10000+1231, early = docs.filter(d => d.fecha && dkey(d.fecha) < y1);
+  $("pdocNote").hidden = !early.length;
+  $("pdocNote").textContent = early.length ? `Valores a ${early.map(d => d.fecha).join(", ")}. Para la declaración cuenta el 31/12/${curYear}: en enero sube el extracto con esa fecha y sustituirá a este.` : "";
+}
+$("pdocs").addEventListener("click", e => {
+  const b = e.target.closest("[data-pdel]"); if (!b) return;
+  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Quitar?"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
+  const s = state.settings, d = (s.patDocs||[])[+b.dataset.pdel]; if (!d) return;
+  s.patDocs = s.patDocs.filter(x => x!==d); s.cartera = (s.cartera||[]).filter(i => i.src!==d.entidad);
+  save(); render();
+});
+const pdrop = $("pdrop"), pfile = $("pfile");
+pfile.addEventListener("change", e => { handlePatFiles([...e.target.files]); pfile.value = ""; });
+pdrop.addEventListener("keydown", e => { if (e.key==="Enter" || e.key===" "){ e.preventDefault(); pfile.click(); } });
+["dragenter","dragover"].forEach(ev => pdrop.addEventListener(ev, e => { e.preventDefault(); pdrop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => pdrop.addEventListener(ev, e => { e.preventDefault(); pdrop.classList.remove("over"); }));
+pdrop.addEventListener("drop", e => handlePatFiles([...e.dataTransfer.files]));
+
+// ---------- Usuarios ----------
+function renderUsers(){
+  const sel = $("userSel");
+  sel.innerHTML = users.list.map(u => `<option value="${esc(u.id)}"${u.id===users.cur?" selected":""}>${esc(u.name)}</option>`).join("");
+  const n = $("userName"); if (document.activeElement!==n) n.value = curUser().name;
+  $("userDel").disabled = users.list.length<2;
+}
+const curUser = () => users.list.find(u => u.id===users.cur) || users.list[0];
+function switchUser(id){
+  users.cur = id; saveUsers(); KS = ukey(id);
+  uf = { acct:"", scope:"year", order:"desc", text:"", tr:false, limit:200 };
+  load(); render();
+}
+$("userSel").onchange = e => switchUser(e.target.value);
+$("userRename").onclick = () => { const v = $("userName").value.trim(); if (!v) return; curUser().name = v; saveUsers(); render(); $("userMsg").textContent = `Ahora se llama «${v}».`; };
+$("userNew").onclick = () => {
+  const name = $("userNew2").value.trim(); if (!name){ $("userMsg").textContent = "Escribe el nombre del nuevo usuario."; $("userNew2").focus(); return; }
+  const id = "u" + Date.now().toString(36); users.list.push({id, name}); $("userNew2").value = "";
+  switchUser(id); $("userMsg").textContent = `Creado «${name}». Empieza con todo vacío.`;
+};
+const ud = $("userDel");
+ud.onclick = () => {
+  if (users.list.length<2) return;
+  if (!ud.dataset.armed){ ud.dataset.armed = "1"; ud.textContent = `Borra todos los años de «${curUser().name}». Pulsa otra vez`; setTimeout(() => { delete ud.dataset.armed; ud.textContent = "Borrar este usuario"; }, 4000); return; }
+  delete ud.dataset.armed; ud.textContent = "Borrar este usuario";
+  const gone = curUser(); try { localStorage.removeItem(ukey(gone.id)); } catch(e){}
+  users.list = users.list.filter(u => u!==gone); switchUser(users.list[0].id);
+  $("userMsg").textContent = `Borrado «${gone.name}».`;
+};
+
+// ---------- App instalable (solo cuando la página está en GitHub Pages) ----------
+let deferredInstall = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; $("installBtn").hidden = false; });
+$("installBtn").onclick = async () => { if (!deferredInstall) return; deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch(e){} deferredInstall = null; $("installBtn").hidden = true; };
+window.addEventListener("appinstalled", () => { $("installBtn").hidden = true; $("installHelp").hidden = true; });
+if (location.hostname.endsWith("github.io")){
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
+  if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)){ $("installHelp").hidden = false; $("installHelp").textContent = "En iPhone o iPad: pulsa el botón Compartir de Safari y luego «Añadir a pantalla de inicio»."; }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
+}
+
+// ---------- Pestañas ----------
+const TABS = {nominas:"nom", bancos:"ban", inversiones:"inv", plan:"plan", inmuebles:"inm", patrimonio:"pat", resumen:"res"};
+function showTab(name){
+  if (!TABS[name]) name = "nominas";
+  for (const [t,id] of Object.entries(TABS)){
+    $("tab-"+id).hidden = t!==name;
+    $("tabbtn-"+id).setAttribute("aria-selected", String(t===name));
+  }
+  try { localStorage.setItem("miRenta:tab", name); } catch(e){}
+}
+function initTabs(){
+  document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { showTab(b.dataset.tab); if (b.classList.contains("rbar-go")) $("tab-res").scrollIntoView?.({block:"start"}); }));
+  let t = (location.hash||"").slice(1);
+  if (!TABS[t]){ try { t = localStorage.getItem("miRenta:tab") || "nominas"; } catch(e){ t = "nominas"; } }
+  showTab(t);
+}
+
+// ---------- Ejercicio y guardado ----------
+const fmtDate = ms => { const d = new Date(ms); return d.toLocaleDateString("es-ES") + " a las " + d.toLocaleTimeString("es-ES", {hour:"2-digit", minute:"2-digit"}); };
+function renderSaveState(){
+  const el = $("saveState"), dr = store.drafts[curYear], sv = store.saved[curYear];
+  $("discard").hidden = !dr;
+  if (!storageOk){ el.className = "savestate dirty"; el.textContent = "Este navegador no permite guardar aquí (¿ventana privada?). Usa la copia de seguridad."; return; }
+  if (dr){ el.className = "savestate dirty"; el.textContent = sv ? `Cambios sin guardar desde el ${fmtDate(sv.at)}` : "Año sin guardar todavía"; }
+  else if (sv){ el.className = "savestate ok"; el.textContent = `Guardado el ${fmtDate(sv.at)}`; }
+  else { el.className = "savestate"; el.textContent = "Sin datos para este año"; }
+}
+function renderYear(){
+  const y = curYear, sel = $("yearSel");
+  const years = new Set([2022,2023,2024,2025,2026,2027,2028, ...Object.keys(store.saved).map(Number), ...Object.keys(store.drafts).map(Number)]);
+  const list = [...years].sort((a,b)=>b-a);
+  if (sel.options.length!==list.length || +sel.value!==y) sel.innerHTML = list.map(v => `<option value="${v}"${v===y?" selected":""}>${v}</option>`).join("");
+  $("eyebrow").textContent = `Ejercicio ${y} · ${curUser().name} · Comunidad de Madrid · renta que se presenta en ${y+1}`;
+  renderUsers();
+  $("h1").textContent = `Mi Renta ${y}`;
+  $("h-renta").textContent = `Estimación Renta ${y}`;
+  document.querySelectorAll(".yr").forEach(e => e.textContent = y);
+  document.querySelectorAll(".yrRange").forEach(e => e.textContent = `${y-4}–${y-1}`);
+  const pn = $("paramNote"); pn.hidden = y===2026;
+  pn.textContent = `Para ${y} se aplican las escalas y deducciones de 2026, así que el resultado es aproximado.`;
+  const saved = Object.keys(store.saved).map(Number).sort((a,b)=>b-a);
+  $("savedYears").innerHTML = saved.length
+    ? "Años guardados: " + saved.map(v => `<button type="button" data-year="${v}"${v===y?' aria-current="true"':""}>${v}</button>`).join("")
+    : "Aún no hay ningún año guardado.";
+  renderSaveState();
+}
+$("yearSel").addEventListener("change", e => { loadYear(+e.target.value); render(); });
+$("savedYears").addEventListener("click", e => { const b = e.target.closest("[data-year]"); if (!b) return; loadYear(+b.dataset.year); render(); });
+$("saveYear").onclick = () => {
+  store.saved[curYear] = { data:snapshot(), at:Date.now() }; delete store.drafts[curYear];
+  writeStore(); render();
+};
+const disc = $("discard"); let discT;
+disc.onclick = () => {
+  if (!disc.dataset.armed){ disc.dataset.armed = "1"; disc.textContent = "¿Seguro? Pulsa otra vez"; clearTimeout(discT); discT = setTimeout(() => { delete disc.dataset.armed; disc.textContent = "Descartar cambios"; }, 3500); return; }
+  delete disc.dataset.armed; disc.textContent = "Descartar cambios";
+  delete store.drafts[curYear]; loadYear(curYear); render();
+};
+$("bkCopy").onclick = async () => {
+  const txt = JSON.stringify({app:"miRenta", v:1, saved:store.saved, drafts:store.drafts}), msg = $("bkMsg");
+  try { await navigator.clipboard.writeText(txt); msg.textContent = "Copia copiada. Pégala en un archivo de notas."; }
+  catch(e){ const t = $("bkText"); t.value = txt; t.select(); msg.textContent = "Selecciona el texto de arriba y cópialo."; }
+};
+const rest = $("bkRestore");
+rest.onclick = () => {
+  const msg = $("bkMsg"); let d;
+  try { d = JSON.parse($("bkText").value); } catch(e){ msg.textContent = "Ese texto no es una copia de seguridad válida."; return; }
+  if (!d || d.app!=="miRenta" || typeof d.saved!=="object"){ msg.textContent = "Ese texto no es una copia de seguridad de Mi Renta."; return; }
+  if (!rest.dataset.armed){ rest.dataset.armed = "1"; rest.textContent = "Sustituirá los años de la copia. Pulsa otra vez"; return; }
+  delete rest.dataset.armed; rest.textContent = "Restaurar";
+  Object.assign(store.saved, d.saved||{}); Object.assign(store.drafts, d.drafts||{});
+  for (const y of Object.keys(d.saved||{})) if (!(d.drafts||{})[y]) delete store.drafts[y];
+  writeStore(); loadYear(curYear); render();
+  msg.textContent = `Restaurados: ${Object.keys(d.saved||{}).sort().join(", ") || "ningún año"}.`; $("bkText").value = "";
+};
+
+load(); initTabs(); render();
+})();
+</script>
+
+
+</body>
+</html>

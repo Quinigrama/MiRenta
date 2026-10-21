@@ -1157,7 +1157,7 @@ function renderInm(c){
   document.getElementById("cntInm").textContent = ims.length || "";
   const f = (m,k,label,extra="") => `<label class="field">${label}<input type="text" inputmode="decimal" id="i-${m.id}-${k}" data-iid="${m.id}" data-ik="${k}" value="${m[k]==null||m[k]===0&&k!=="pct"?"":fmt(m[k], k==="pct"?0:2)}"${extra}></label>`;
   if (!ims.length){ list.innerHTML = `<div class="empty">No hay inmuebles. Pulsa «Añadir inmueble» si cobras algún alquiler.</div>`; document.getElementById("inmTot").innerHTML=""; return; }
-  if (!list.contains(document.activeElement)) list.innerHTML = ims.map(m => {
+  keepFocus(list); list.innerHTML = ims.map(m => {
     const r = c.inms.find(x=>x.id===m.id) || {};
     return `<div class="inm">
       <div class="inm-head"><input type="text" id="i-${m.id}-nombre" data-iid="${m.id}" data-ik="nombre" value="${esc(m.nombre||"")}" placeholder="Nombre del inmueble" aria-label="Nombre del inmueble"><button type="button" class="ghost danger" data-idel="${m.id}">Quitar</button></div>
@@ -1192,6 +1192,17 @@ document.getElementById("inmList").addEventListener("click", e => {
   state.settings.inmuebles = state.settings.inmuebles.filter(m => m.id!==b.dataset.idel); save(); render();
 });
 
+// Repinta una tabla sin perder el campo en el que estás escribiendo (el cursor vuelve a su sitio)
+function keepFocus(el){
+  const a = document.activeElement;
+  if (!a || !a.id || !el.contains(a)) return;
+  const id = a.id, val = a.value, sel = typeof a.selectionStart === "number" ? [a.selectionStart, a.selectionEnd] : null;
+  queueMicrotask(() => {
+    const n = document.getElementById(id); if (!n || n===a) return;
+    if (n.tagName==="INPUT" && n.type==="text") n.value = val;
+    try { n.focus({preventScroll:true}); if (sel && n.setSelectionRange) n.setSelectionRange(sel[0], sel[1]); } catch(e){}
+  });
+}
 // Rescate máximo: sin subir el IRPF y sin que la renta salga a pagar (sin contar la retención de la gestora)
 function renderIdeal(c){
   const s = state.settings, ratio = s.resc>0 ? Math.min(1,(s.resc40||0)/s.resc) : 0;
@@ -1807,7 +1818,7 @@ $("ballAccts").addEventListener("change", e => {
 });
 $("bfiles").addEventListener("click", e => {
   const b = e.target.closest("[data-fdel]"); if (!b) return;
-  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Quitar?"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
+  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Seguro? Toca otra vez"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
   const f = state.bank.files[+b.dataset.fdel]; if (!f) return;
   state.bank.rows = state.bank.rows.filter(r => r.file!==f.name);
   state.bank.all = (state.bank.all||[]).filter(m => m.file!==f.name);
@@ -1833,7 +1844,7 @@ function renderInv(c){
   const s = state.settings, cart = s.cartera||[], ven = s.ventas||[];
   $("cntInv").textContent = (cart.length + ven.length) || "";
   const cb = $("cartBody"), vb = $("ventBody");
-  if (!cb.contains(document.activeElement)) cb.innerHTML = cart.length ? cart.map(it => `<tr>
+  keepFocus(cb); cb.innerHTML = cart.length ? cart.map(it => `<tr>
     <td class="l"><input type="text" id="c-${it.id}-nombre" data-cid="${it.id}" data-ck="nombre" value="${esc(it.nombre||"")}" placeholder="Iberdrola, Bitcoin…" aria-label="Nombre" style="width:170px">${it.src?`<span class="fname">${esc(it.src)}${it.fecha?" · "+esc(it.fecha):""}</span>`:""}</td>
     <td class="l"><select id="c-${it.id}-tipo" data-cid="${it.id}" data-ck="tipo" aria-label="Tipo">${optsT(it.tipo, ["acc","fondo","cripto","dep","otro"])}</select></td>
     <td class="l"><input type="text" id="c-${it.id}-ent" data-cid="${it.id}" data-ck="entidad" value="${esc(it.entidad||"")}" placeholder="Entidad" aria-label="Entidad" style="width:120px"></td>
@@ -1846,7 +1857,7 @@ function renderInv(c){
   const tot = k => cart.filter(i => i.tipo===k).reduce((t,i) => t+valOf(i), 0);
   $("cartTot").innerHTML = Object.keys(TIPO_INV).filter(k => tot(k)).map(k => `<div class="bk"><div class="k">${TIPO_INV[k]}</div><div class="v">${eur(tot(k))}</div></div>`).join("")
     + `<div class="bk"><div class="k">Total cartera</div><div class="v">${eur(cart.reduce((t,i)=>t+valOf(i),0))}</div></div>`;
-  if (!vb.contains(document.activeElement)) vb.innerHTML = ven.length ? ven.map(v => { const r = (v.venta||0)-(v.coste||0); return `<tr>
+  keepFocus(vb); vb.innerHTML = ven.length ? ven.map(v => { const r = (v.venta||0)-(v.coste||0); return `<tr>
     <td class="l"><input type="text" id="v-${v.id}-nombre" data-vid="${v.id}" data-vk="nombre" value="${esc(v.nombre||"")}" placeholder="Qué vendiste" aria-label="Activo" style="width:150px"></td>
     <td class="l"><select id="v-${v.id}-tipo" data-vid="${v.id}" data-vk="tipo" aria-label="Tipo">${optsT(v.tipo, ["acc","fondo","cripto","otro"])}</select></td>
     <td class="l"><input type="text" id="v-${v.id}-fecha" data-vid="${v.id}" data-vk="fecha" value="${esc(v.fecha||"")}" placeholder="dd/mm/aaaa" aria-label="Fecha" style="width:100px"></td>
@@ -1872,7 +1883,7 @@ function invChange(listKey, idKey, kKey){
 $("cartBody").addEventListener("change", invChange("cartera", "cid", "ck"));
 $("ventBody").addEventListener("change", invChange("ventas", "vid", "vk"));
 const armDel = (b, listKey, attr) => {
-  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Quitar?"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
+  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Seguro? Toca otra vez"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
   state.settings[listKey] = (state.settings[listKey]||[]).filter(x => x.id!==b.dataset[attr]); save(); render();
 };
 $("cartBody").addEventListener("click", e => { const b = e.target.closest("[data-cdel]"); if (b) armDel(b, "cartera", "cdel"); });
@@ -2033,7 +2044,7 @@ function renderPatDocs(){
 }
 $("pdocs").addEventListener("click", e => {
   const b = e.target.closest("[data-pdel]"); if (!b) return;
-  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Quitar?"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
+  if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Seguro? Toca otra vez"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
   const s = state.settings, d = (s.patDocs||[])[+b.dataset.pdel]; if (!d) return;
   s.patDocs = s.patDocs.filter(x => x!==d); s.cartera = (s.cartera||[]).filter(i => i.src!==d.entidad);
   save(); render();

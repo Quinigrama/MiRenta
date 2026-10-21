@@ -216,6 +216,7 @@ table.inv{min-width:760px}
 .checks li p{margin:2px 0 0;color:var(--muted);font-size:14px;max-width:70ch}
 .checks .chip{margin-top:3px}
 .field .hint{font-size:12px}
+.ledger small.cas{display:inline-block;margin-left:6px;padding:0 6px;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--muted);font:500 10.5px var(--f-num);letter-spacing:.02em;vertical-align:1px;white-space:nowrap}
 .linkbtn{display:block;border:none;background:none;padding:4px 0 0;color:var(--accent);font:600 13px var(--f-body);cursor:pointer}
 .linkbtn:hover{text-decoration:underline}
 .apoline{display:block;font-size:12px;color:var(--muted);margin-top:2px}
@@ -513,7 +514,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
       </section>
       <section class="panel" aria-labelledby="h-vent">
         <div class="panel-head"><h2 id="h-vent">Ventas en <span class="yr">2026</span></h2><button type="button" id="ventAdd" class="primary">+ Añadir venta</button></div>
-        <p class="note">Esto sí va a la renta (base del ahorro). Pon lo que cobraste al vender, ya descontadas las comisiones, y lo que te costó comprar eso mismo, con comisiones. Si compraste en varias veces, se consideran vendidas primero las más antiguas (FIFO). Cambiar una cripto por otra también cuenta como venta. Con acciones, si recompras las mismas en los 2 meses siguientes a vender con pérdidas, esa pérdida se aplaza.</p>
+        <p class="note">Esto sí va a la renta (base del ahorro). Pon lo que cobraste al vender, ya descontadas las comisiones, y lo que te costó comprar eso mismo, con comisiones. Si compraste en varias veces, se consideran vendidas primero las más antiguas (FIFO). Cambiar una cripto por otra también cuenta como venta. Con acciones, si recompras las mismas en los 2 meses siguientes a vender con pérdidas, esa pérdida se aplaza. Casillas (Renta 2025): fondos 0324/0325, acciones 0326 a 0340, cripto 1800 (una línea por operación).</p>
         <div class="tablebox"><table class="inv"><thead><tr><th class="l">Activo</th><th class="l">Tipo</th><th class="l">Fecha</th><th>Importe de venta €</th><th>Coste de compra €</th><th>Resultado €</th><th></th></tr></thead><tbody id="ventBody"></tbody></table></div>
         <div class="ledger" id="ventTot" style="max-width:420px"></div>
       </section>
@@ -630,7 +631,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
               <div class="legend" id="euroLeg"></div>
             </div>
           </div>
-          <div class="ledger" id="ledger"></div>
+          <div><div class="ledger" id="ledger"></div><p class="note" style="margin-top:8px">Las etiquetas grises son las casillas de la <strong>Renta 2025</strong>. El número puede cambiar de un año a otro: compruébalo en tu borrador. Las retenciones no se escriben aparte, salen junto a cada ingreso.</p></div>
         </div>
       </section>
 
@@ -1091,7 +1092,14 @@ function renderSummary(c){
   document.getElementById("euro").innerHTML = ingresos>0 ? parts.map(([k,v,col]) => `<i style="width:${v/ingresos*100}%;background:${col}" title="${k}: ${eur(v)}"></i>`).join("") : "";
   document.getElementById("euroLeg").innerHTML = parts.map(([k,v,col]) => `<span><i style="background:${col}"></i>${k} ${ingresos?fmt(v/ingresos*100,1)+" %":""}</span>`).join("");
 
-  const row = (k,v,cls="") => `<div class="row ${cls}"><span>${k}</span><span>${v}</span></div>`;
+  // Casillas de la Renta 2025 (pueden cambiar de número de un año a otro)
+  const CAS = { "Nóminas: devengado cobrado":"0003", "Cotizaciones Seguridad Social":"0013", "Cuotas sindicales / colegio":"0014",
+    "Rescate del plan de pensiones":"Trabajo · 2.º pagador", "Reducción 40 % aportaciones hasta 2006":"Trabajo · reducción",
+    "Dividendos brutos":"0029", "Intereses brutos":"0027", "Comisiones de custodia":"0037", "Dividendos e intereses (bruto)":"0027 · 0029",
+    "Staking y lending de cripto":"0033 (por confirmar)", "Ventas de acciones, fondos y cripto":"0324 fondos · 0339/0340 acciones · 1800 cripto",
+    "Otras ganancias o pérdidas":"Ganancias y pérdidas", "Pérdidas anteriores contra ganancias":"0392–0460", "Pérdidas anteriores contra dividendos (25 %)":"0392–0460",
+    "Deducción doble imposición internacional":"Ded. doble imposición internacional", "Rendimiento neto reducido de inmuebles":"0102–0150" };
+  const row = (k,v,cls="") => { const cas = CAS[k] || (k.startsWith("Proyección") ? "0003" : ""); return `<div class="row ${cls}"><span>${k}${cas?` <small class="cas">${cas}</small>`:""}</span><span>${v}</span></div>`; };
   const neg = v => "−"+eur(v);
   const s = state.settings;
   let h = `<div class="sec">Rendimientos del trabajo</div>`;
@@ -2371,10 +2379,12 @@ async function generateReport(){
     title("1. Liquidación del IRPF");
     const led = [];
     for (const el of $("ledger").children){
-      if (el.classList.contains("sec")) led.push([SEC(el.textContent, 2)]);
-      else { const sp = el.querySelectorAll("span"); const isT = el.classList.contains("tot"); led.push([isT ? B(sp[0].textContent) : "   " + sp[0].textContent, isT ? B(sp[1].textContent) : sp[1].textContent]); }
+      if (el.classList.contains("sec")) led.push([SEC(el.textContent, 3)]);
+      else { const sp = el.querySelectorAll(":scope > span"), cas = sp[0].querySelector(".cas"), lab = cas ? sp[0].textContent.replace(cas.textContent, "").trim() : sp[0].textContent, isT = el.classList.contains("tot");
+        led.push([isT ? B(lab) : "   " + lab, cas ? cas.textContent : "", isT ? B(sp[1].textContent) : sp[1].textContent]); }
     }
-    table(["Concepto", "Importe"], led, { num:[1], fs:8.5 });
+    table(["Concepto", "Casilla (Renta 2025)", "Importe"], led, { num:[2], fs:8.3, cs:{1:{cellWidth:46, textColor:[90,104,112]}} });
+    para("Los números de casilla son los de la Renta 2025 y pueden cambiar de un año a otro: compruébalos en tu borrador. Las retenciones salen junto a cada ingreso.");
     para(`Tipo medio retenido: ${pct(c.RI ? c.RET/c.RI : NaN)} · Tipo efectivo real: ${pct(c.RI ? c.CL/c.RI : NaN)}. Escalas estatal y de Madrid de 2026${y0!==2026?" (aplicadas a este año como aproximación)":""}.`);
 
     // ---- 2. Nóminas ----

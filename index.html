@@ -634,6 +634,14 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         </div>
       </section>
 
+      <section class="panel" aria-labelledby="h-pdf">
+        <div class="panel-head"><h2 id="h-pdf">Informe completo en PDF</h2></div>
+        <p class="note">Un solo PDF con la liquidación, las nóminas con su gráfico y un resumen tipo certificado de retenciones, los movimientos fiscales, las inversiones con sus aportaciones, el plan de pensiones, los inmuebles, el patrimonio, todos los movimientos de banco unificados y la comparación entre años. Se crea en tu dispositivo: no se sube nada.</p>
+        <div class="toolbar"><button id="pdfBtn" type="button" class="primary">📄 Descargar informe (PDF)</button></div>
+        <p class="note" id="pdfNoFile" hidden>En esta vista no se pueden descargar archivos. Ábrelo desde la app (quinigrama.github.io/MiRenta).</p>
+        <p class="note" id="pdfMsg" aria-live="polite"></p>
+      </section>
+
       <section class="panel" aria-labelledby="h-cmp">
         <div class="panel-head"><h2 id="h-cmp">Comparación entre años</h2><span class="hint">Años guardados y el que tienes abierto</span></div>
         <div class="tablebox"><table style="min-width:720px"><thead><tr><th class="l">Año</th><th>Trabajo</th><th>Inmuebles</th><th>Ahorro</th><th>Cuota líquida</th><th>Retenciones</th><th>Resultado</th><th>Patrimonio neto</th></tr></thead><tbody id="cmpBody"></tbody></table></div>
@@ -2291,6 +2299,243 @@ $("bkCopy").onclick = async () => {
   catch(e){ const t = $("bkText"); t.value = txt; t.select(); msg.textContent = "Selecciona el texto del cuadro y cópialo."; }
 };
 $("bkRestore").onclick = () => { previewBackup($("bkText").value); $("bkText").value = ""; };
+
+// ---------- Informe completo en PDF (se genera en el dispositivo con jsPDF) ----------
+const PDF_LIBS = [
+  ["https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js", "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"],
+  ["https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js", "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"]
+];
+const loadOne = src => new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
+async function loadPdfLibs(){
+  for (const urls of PDF_LIBS){
+    if (urls[0].includes("autotable") ? (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable) : (window.jspdf && window.jspdf.jsPDF)) continue;
+    let done = false;
+    for (const u of urls){ try { await loadOne(u); done = true; break; } catch(e){} }
+    if (!done) throw new Error("no he podido cargar el generador de PDF (¿sin conexión?)");
+  }
+}
+// Las fuentes del PDF solo tienen caracteres latinos: cambia los signos que no existen
+const PT = s => String(s ?? "").replace(/−/g, "-").replace(/[^\x00-\xFF€—–‘’“”•…]/g, "").replace(/\s+/g, " ").trim();
+async function generateReport(){
+  const btn = $("pdfBtn"), msg = $("pdfMsg");
+  btn.disabled = true; msg.textContent = "Preparando el informe…";
+  try {
+    await loadPdfLibs();
+    render();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:"mm", format:"a4" });
+    const W = 210, H = 297, M = 14, IW = W - 2*M;
+    const ACC = [29,93,124], INK = [22,33,42], MUT = [90,104,112], LINE = [210,218,216];
+    const y0 = curYear, user = curUser().name, c = compute(), s = state.settings;
+    let y = M;
+    const ensure = h => { if (y + h > H - 18){ doc.addPage(); y = M; } };
+    const title = t => { doc.addPage(); y = M; doc.setFillColor(...ACC); doc.rect(0, 0, W, 22, "F"); doc.setTextColor(255); doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text(PT(t), M, 14); doc.setTextColor(...INK); y = 30; };
+    const sub = t => { ensure(14); doc.setFont("helvetica","bold"); doc.setFontSize(11.5); doc.setTextColor(...ACC); doc.text(PT(t), M, y); doc.setTextColor(...INK); y += 5; };
+    const para = (t, size=9, color=MUT) => { doc.setFont("helvetica","normal"); doc.setFontSize(size); doc.setTextColor(...color); const L = doc.splitTextToSize(PT(t), IW); ensure(L.length*4.2 + 2); doc.text(L, M, y); y += L.length*4.2 + 2; doc.setTextColor(...INK); };
+    const table = (head, body, opt={}) => {
+      if (!body.length){ para("Sin datos."); return; }
+      const numCols = opt.num || [];
+      const columnStyles = {}; numCols.forEach(i => columnStyles[i] = { halign:"right" });
+      doc.autoTable({ startY:y, head: head ? [head.map(PT)] : undefined, body: body.map(r => r.map(x => (x && typeof x==="object") ? {...x, content:PT(x.content)} : PT(x))),
+        margin:{left:M, right:M}, theme:"grid", styles:{ fontSize: opt.fs || 8, cellPadding:1.4, lineColor:LINE, lineWidth:0.1, textColor:INK, overflow:"linebreak" },
+        headStyles:{ fillColor:ACC, textColor:255, fontStyle:"bold" }, alternateRowStyles:{ fillColor:[246,248,248] }, columnStyles: {...columnStyles, ...(opt.cs||{})},
+        didParseCell: opt.bold ? (d => { if (d.section==="body" && opt.bold(d.row.index)) d.cell.styles.fontStyle = "bold"; }) : undefined });
+      y = doc.lastAutoTable.finalY + 6;
+    };
+    const B = t => ({ content:t, styles:{ fontStyle:"bold" } });
+    const SEC = (t, n) => ({ content:t, colSpan:n, styles:{ fontStyle:"bold", textColor:ACC, fillColor:[236,242,244] } });
+    const ex = state.rows.every(r=>r.example), bkEx = state.bank.rows.every(r=>r.example);
+
+    // ---- Portada ----
+    doc.setFillColor(...ACC); doc.rect(0, 0, W, 60, "F");
+    doc.setTextColor(255); doc.setFont("helvetica","bold"); doc.setFontSize(26); doc.text(PT(`Mi Renta ${y0}`), M, 30);
+    doc.setFont("helvetica","normal"); doc.setFontSize(12); doc.text(PT(`Informe completo · ${user} · Comunidad de Madrid`), M, 40);
+    doc.setFontSize(9.5); doc.text(PT(`Generado el ${fmtDate(Date.now())} · renta que se presenta en ${y0+1}`), M, 48);
+    y = 76; doc.setTextColor(...INK);
+    const pay = c.resultado > 0.005;
+    doc.setFillColor(...(pay ? [246,227,222] : [221,239,228])); doc.roundedRect(M, y, IW, 28, 3, 3, "F");
+    doc.setTextColor(...(pay ? [163,65,47] : [43,122,79])); doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.text(pay ? "TE SALDRÍA A PAGAR" : "TE SALDRÍA A DEVOLVER", M+6, y+9);
+    doc.setFontSize(24); doc.text(PT(eur(Math.abs(c.resultado))), M+6, y+21); doc.setTextColor(...INK); y += 36;
+    const P0 = patrimonio();
+    table(["Dato clave", "Importe"], [
+      ["Rendimientos íntegros del trabajo", eur(c.RIcomp)], ["Base liquidable general", eur(c.BLG)], ["Base liquidable del ahorro", eur(c.BA)],
+      ["Cuota líquida (lo que te corresponde pagar en el año)", eur(c.CL)], ["Retenciones ya pagadas", eur(c.RET + c.retAh + c.retResc)],
+      [B(pay ? "Resultado: a pagar" : "Resultado: a devolver"), B(eur(Math.abs(c.resultado)))], ["Patrimonio neto", eur(P0.neto)]
+    ], { num:[1], fs:9.5 });
+    if (ex || bkEx) para(`Atención: ${[ex?"las nóminas":"", bkEx?"los movimientos fiscales de banco":""].filter(Boolean).join(" y ")} son datos de ejemplo de la página. Carga los tuyos para que el informe sea real.`, 9, [163,65,47]);
+    para(`${s.proj ? "Las nóminas se proyectan hasta diciembre con la media de las cobradas." : "Solo cuenta lo cobrado hasta ahora."} Es una estimación orientativa: el dato que manda es el borrador de la Agencia Tributaria.`);
+    sub("Contenido");
+    para("1. Liquidación del IRPF · 2. Nóminas y resumen tipo certificado de retenciones · 3. Ahorro: bancos, ventas y compensaciones · 4. Inversiones y aportaciones · 5. Plan de pensiones · 6. Inmuebles · 7. Patrimonio · 8. Movimientos bancarios unificados · 9. Comparación entre años", 9.5, INK);
+
+    // ---- 1. Liquidación ----
+    title("1. Liquidación del IRPF");
+    const led = [];
+    for (const el of $("ledger").children){
+      if (el.classList.contains("sec")) led.push([SEC(el.textContent, 2)]);
+      else { const sp = el.querySelectorAll("span"); const isT = el.classList.contains("tot"); led.push([isT ? B(sp[0].textContent) : "   " + sp[0].textContent, isT ? B(sp[1].textContent) : sp[1].textContent]); }
+    }
+    table(["Concepto", "Importe"], led, { num:[1], fs:8.5 });
+    para(`Tipo medio retenido: ${pct(c.RI ? c.RET/c.RI : NaN)} · Tipo efectivo real: ${pct(c.RI ? c.CL/c.RI : NaN)}. Escalas estatal y de Madrid de 2026${y0!==2026?" (aplicadas a este año como aproximación)":""}.`);
+
+    // ---- 2. Nóminas ----
+    title("2. Nóminas");
+    const nom = state.rows.filter(r => !r.example);
+    const tot = k => nom.reduce((t,r)=>t+(r[k]||0),0);
+    table(["Mes", "Extra", "Devengado", "S. Social", "IRPF", "% IRPF", "Líquido"],
+      nom.map(r => [r.mes!=null ? MESES[r.mes] : "—", r.extra ? "Sí" : "", fmt(r.dev), fmt(r.ss), fmt(r.irpf), r.dev ? pct(r.irpf/r.dev) : "—", fmt(r.liq)])
+        .concat(nom.length ? [[B("Total"), "", B(fmt(tot("dev"))), B(fmt(tot("ss"))), B(fmt(tot("irpf"))), B(tot("dev") ? pct(tot("irpf")/tot("dev")) : "—"), B(fmt(tot("liq")))]] : []),
+      { num:[2,3,4,5,6] });
+    // Gráfico mes a mes
+    sub("Mes a mes (en claro, meses proyectados)");
+    ensure(62);
+    const ch = { x:M+14, y, w:IW-14, h:50 }, months = Array.from({length:12}, () => ({dev:0, ss:0, irpf:0, proj:false}));
+    for (const r of nom){ if (r.mes==null) continue; const m = months[r.mes]; m.dev += r.dev||0; m.ss += r.ss||0; m.irpf += r.irpf||0; }
+    for (const m of c.projMonths) Object.assign(months[m], {dev:c.avg.dev, ss:c.avg.ss, irpf:c.avg.irpf, proj:true});
+    const mx = Math.max(1, ...months.map(m=>m.dev)), step = niceStep(mx/4), top = Math.ceil(mx/step)*step;
+    doc.setFontSize(7); doc.setDrawColor(...LINE); doc.setLineWidth(0.1);
+    for (let v=0; v<=top+1e-6; v+=step){ const yy = ch.y + ch.h - v/top*ch.h; doc.line(ch.x, yy, ch.x+ch.w, yy); doc.setTextColor(...MUT); doc.text(fmt(v,0), ch.x-2, yy+1, {align:"right"}); }
+    const bw = ch.w/12;
+    months.forEach((m,i) => {
+      const x = ch.x + i*bw + bw*0.18, w = bw*0.64; let cur = 0;
+      for (const [v,col] of [[Math.max(0,m.dev-m.ss-m.irpf),[29,93,124]],[m.ss,[185,133,43]],[m.irpf,[142,59,70]]]){
+        if (v<=0) continue; const h = v/top*ch.h; const c2 = m.proj ? col.map(k => Math.round(k + (255-k)*0.6)) : col;
+        doc.setFillColor(...c2); doc.rect(x, ch.y + ch.h - (cur+v)/top*ch.h, w, h, "F"); cur += v;
+      }
+      doc.setTextColor(...MUT); doc.text(MESES[i], ch.x + i*bw + bw/2, ch.y + ch.h + 4, {align:"center"});
+    });
+    y = ch.y + ch.h + 8;
+    [["Neto",[29,93,124]],["Seguridad Social",[185,133,43]],["IRPF",[142,59,70]]].forEach(([k,col],i) => { doc.setFillColor(...col); doc.rect(M + i*40, y-2.5, 3, 3, "F"); doc.setTextColor(...INK); doc.setFontSize(8); doc.text(k, M + i*40 + 4.5, y); });
+    y += 7;
+    sub("Resumen tipo certificado de retenciones");
+    para("Compáralo con el certificado de retenciones que te da la empresa en enero: con las 12 nóminas cargadas, la columna «Año completo» debería coincidir con sus casillas de íntegro dinerario, retenciones y gastos deducibles.");
+    table(["Concepto", "Cobrado hasta ahora", "Año completo (estimado)"], [
+      ["Rendimientos íntegros dinerarios", fmt(c.real.dev), fmt(c.real.dev + c.proj.dev)],
+      ["Retenciones e ingresos a cuenta (IRPF)", fmt(c.real.irpf), fmt(c.RET)],
+      ["Gastos deducibles: cotizaciones a la Seguridad Social", fmt(c.real.ss), fmt(c.SS)],
+      ["Líquido percibido", fmt(c.real.liq), "—"],
+      ["Nóminas incluidas", String(nom.length), String(nom.length + c.proj.meses) + (c.proj.extras ? ` + ${c.proj.extras} extra` : "")]
+    ], { num:[1,2] });
+
+    // ---- 3. Ahorro ----
+    title("3. Ahorro: bancos, ventas y compensaciones");
+    const bk = bankTotals(false);
+    sub("Movimientos fiscales de banco incluidos");
+    const fis = state.bank.rows.filter(r => r.inc && !r.example).slice().sort((a,b) => dkey(a.fecha)-dkey(b.fecha));
+    table(["Fecha", "Banco", "Concepto", "Tipo", "Importe", "Neto/bruto", "Ret. origen"],
+      fis.map(r => [r.fecha, r.banco, String(r.concepto||"").slice(0,48), TIPOS[r.tipo]||r.tipo, fmt(r.importe), ["div","int"].includes(r.tipo) ? (r.modo==="neto"?"Neto":"Bruto") : "", r.retOrigen ? fmt(r.retOrigen) : ""]),
+      { num:[4,6], cs:{2:{cellWidth:56}} });
+    if (bk){
+      table(["Banco", "Bruto", "Retenido en España"], Object.entries(bk.by).map(([b,v]) => [b, fmt(v.g), fmt(v.r)])
+        .concat([[B("Total"), B(fmt(bk.div+bk.int)), B(fmt(bk.ret))]]), { num:[1,2] });
+      table(["Resumen", "Importe"], [["Dividendos brutos", eur(bk.div)], ["Intereses brutos", eur(bk.int)], ["Comisiones de custodia", eur(bk.cus)], ["Retenido en origen (doble imposición)", eur(bk.foreignRet)]], { num:[1] });
+    }
+    sub("Ventas de inversiones");
+    table(["Activo", "Tipo", "Fecha", "Venta", "Coste", "Resultado"], (s.ventas||[]).map(v => [v.nombre||"—", TIPO_INV[v.tipo]||"", v.fecha||"", fmt(v.venta||0), fmt(v.coste||0), fmt((v.venta||0)-(v.coste||0))]), { num:[3,4,5] });
+    table(["Otros datos del ahorro", "Importe"], [
+      ["Staking y lending de cripto", eur(c.staking)], ["Otras ganancias o pérdidas", eur(c.gp0 - c.ventasInv)],
+      ["Pérdidas de años anteriores pendientes", eur(s.perdAnt||0)], ["Pérdidas compensadas este año", eur(c.cross + c.compGP + c.compRCM)],
+      ["Pérdidas que quedan para próximos años", eur(c.pendFut)], ["Base liquidable del ahorro", B(eur(c.BA))]
+    ], { num:[1] });
+
+    // ---- 4. Inversiones ----
+    title("4. Inversiones");
+    const cart = s.cartera||[];
+    table(["Activo", "Tipo", "Entidad", "Cantidad", "Precio", "Valor", "Invertido", "Ganancia"],
+      cart.map(it => { const A = apoSum(it); return [it.nombre||"—", TIPO_INV[it.tipo]||"", it.entidad||"", fmtQ(it.qty), it.precio==null ? "" : fmtQ(it.precio), fmt(valOf(it)), A.n ? fmt(A.inv) : "", A.n ? fmt(valOf(it)-A.inv) : ""]; })
+        .concat(cart.length ? [[B("Total"), "", "", "", "", B(fmt(cart.reduce((t,i)=>t+valOf(i),0))), "", ""]] : []),
+      { num:[3,4,5,6,7], cs:{0:{cellWidth:44}} });
+    for (const it of cart.filter(i => (i.aportes||[]).length)){
+      const A = apoSum(it);
+      sub(`Aportaciones · ${it.nombre||"—"}`);
+      table(["Fecha", "Importe", "Participaciones", "Precio de compra"],
+        it.aportes.slice().sort((a,b)=>dkey(a.fecha)-dkey(b.fecha)).map(a => [a.fecha||"", fmt(a.importe||0), fmtQ(a.qty), a.precio==null ? "" : fmtQ(a.precio)])
+          .concat([[B("Total"), B(fmt(A.inv)), B(fmtQ(Math.round(A.qty*1e6)/1e6)), B(A.qty ? "medio " + fmtQ(Math.round(A.inv/A.qty*1e4)/1e4) : "—")]]),
+        { num:[1,2,3] });
+    }
+
+    // ---- 5. Plan de pensiones ----
+    title("5. Plan de pensiones");
+    table(["Dato", "Importe"], [["Valor actual (provisión matemática)", eur(s.pPlan||0)], ["Rescate previsto en el año", eur(c.resc)], ["Reducción del 40 % (aportaciones hasta 2006)", eur(c.rescRed)], ["Retención de la gestora", eur(c.retResc)]], { num:[1] });
+    const tiles = [...$("idealTiles").querySelectorAll(".bk")].map(b => [b.querySelector(".k").textContent, b.querySelector(".v").textContent, b.querySelector(".tip")?.textContent || ""]);
+    if (tiles.length){ sub("¿Cuánto puedo rescatar sin que me cueste?"); table(["Escenario", "Importe", "Explicación"], tiles, { num:[1], cs:{2:{cellWidth:100}} }); }
+    const resc = [...$("rescBody").querySelectorAll("tr")].map(tr => [...tr.children].map(td => td.textContent));
+    if (resc.length){ sub("Coste de rescatar según el importe"); table(["Rescate", "IRPF extra", "Tipo medio", "Tipo del tramo", "Te queda"], resc, { num:[1,2,3,4] }); }
+
+    // ---- 6. Inmuebles ----
+    title("6. Inmuebles");
+    if (!c.inms.length) para("No hay inmuebles alquilados.");
+    for (const m of c.inms){
+      const src = (s.inmuebles||[]).find(x => x.id===m.id) || {};
+      sub(m.nombre);
+      table(["Concepto", "Importe"], [["Rentas cobradas (tu parte)", eur(m.ing)], ["Intereses y reparaciones", eur(m.intRep)], ["IBI, comunidad, seguro y otros", eur(m.gastos)], ["Amortización (3 %)", eur(m.amort)],
+        ["Rendimiento neto", B(eur(m.neto))], [`Reducción (${fmt(m.redPct*100,0)} %)`, eur(m.red)], ["Rendimiento que tributa", B(eur(m.netoRed))], ["Tu parte de la propiedad", `${fmt(src.pct==null?100:src.pct,0)} %`], ["Valor para el patrimonio", eur((src.valor||0))]], { num:[1] });
+    }
+
+    // ---- 7. Patrimonio ----
+    title(`7. Patrimonio a 31/12/${y0}`);
+    const P = patrimonio();
+    // Barra de composición
+    const cols = { "var(--p1)":[29,93,124], "var(--p2)":[79,155,181], "var(--p3)":[185,133,43], "var(--p4)":[142,59,70], "var(--p5)":[107,92,165], "var(--p6)":[124,138,146], "var(--p7)":[43,122,79], "var(--p8)":[194,106,61], "var(--p9)":[76,107,138], "var(--p10)":[163,160,138] };
+    const vis = P.parts.filter(p => p[1] > 0.005);
+    if (P.bienes > 0){
+      let x = M; vis.forEach(p => { const w = p[1]/P.bienes*IW; doc.setFillColor(...(cols[p[2]]||ACC)); doc.rect(x, y, w, 7, "F"); x += w; }); y += 11;
+      doc.setFontSize(7.5); let lx = M, ly = y;
+      vis.forEach(p => { const t = PT(`${p[0]} ${fmt(p[1]/P.bienes*100,1)} %`), tw = doc.getTextWidth(t) + 9; if (lx + tw > M + IW){ lx = M; ly += 5; } doc.setFillColor(...(cols[p[2]]||ACC)); doc.rect(lx, ly-2.5, 3, 3, "F"); doc.setTextColor(...INK); doc.text(t, lx+4.5, ly); lx += tw; });
+      y = ly + 7;
+    }
+    table(["Bloque", "De dónde sale", "Valor"], P.parts.map(p => [p[0], p[3], fmt(p[1])]).concat([["Deudas pendientes", "Dato manual", "-" + fmt(P.deudas)], [B("Patrimonio neto"), "", B(fmt(P.neto))]]), { num:[2] });
+    sub("Qué tienes que presentar");
+    for (const li of $("patChecks").querySelectorAll("li")){ para(`${li.querySelector(".chip")?.textContent || ""} · ${li.querySelector("strong")?.textContent || ""}`, 9, INK); para(li.querySelector("p")?.textContent || ""); }
+    if ((s.patDocs||[]).length) para(`Extractos de patrimonio usados: ${s.patDocs.map(d => `${d.entidad} a ${d.fecha}`).join(", ")}.`);
+
+    // ---- 8. Movimientos unificados ----
+    title("8. Movimientos bancarios unificados");
+    const u = unified();
+    if (!u) para("No hay extractos con todos los movimientos. Súbelos en la pestaña Bancos.");
+    else {
+      const yA = y0*10000+101, yZ = y0*10000+1231, inY = u.list.filter(m => m.k>=yA && m.k<=yZ), alias = state.bank.alias||{};
+      table(["Cuenta", "Movimientos", "Último saldo", "Fecha"], u.accts.map(a => [a.name, String(a.n), a.bal==null ? "—" : fmt(a.bal), a.fecha]).concat([[B("Total"), "", B(fmt(u.accts.reduce((t,a)=>t+(a.bal||0),0))), ""]]), { num:[1,2] });
+      // Evolución del saldo total
+      const pts = []; for (const m of inY){ if (pts.length && pts[pts.length-1].k===m.k) pts[pts.length-1].t = m.total; else pts.push({k:m.k, t:m.total}); }
+      if (pts.length > 1){
+        sub(`Saldo total de tus cuentas en ${y0}`); ensure(48);
+        const g = { x:M+16, y, w:IW-16, h:38 }, lo0 = Math.min(...pts.map(p=>p.t)), hi0 = Math.max(...pts.map(p=>p.t));
+        const st = niceStep(Math.max(1, hi0-lo0)/3), lo = Math.floor(lo0/st)*st, hi = Math.max(lo+st, Math.ceil(hi0/st)*st);
+        const kx = k => g.x + (kDays(k)-kDays(pts[0].k)) / Math.max(1, kDays(pts[pts.length-1].k)-kDays(pts[0].k)) * g.w, ky = v => g.y + g.h - (v-lo)/(hi-lo)*g.h;
+        doc.setFontSize(7); doc.setDrawColor(...LINE); doc.setLineWidth(0.1);
+        for (let v=lo; v<=hi+1e-6; v+=st){ doc.line(g.x, ky(v), g.x+g.w, ky(v)); doc.setTextColor(...MUT); doc.text(fmt(v,0), g.x-2, ky(v)+1, {align:"right"}); }
+        doc.setDrawColor(...ACC); doc.setLineWidth(0.5);
+        for (let i=1; i<pts.length; i++){ doc.line(kx(pts[i-1].k), ky(pts[i-1].t), kx(pts[i].k), ky(pts[i-1].t)); doc.line(kx(pts[i].k), ky(pts[i-1].t), kx(pts[i].k), ky(pts[i].t)); }
+        doc.setTextColor(...MUT); doc.text(kFmt(pts[0].k), g.x, g.y+g.h+4); doc.text(kFmt(pts[pts.length-1].k), g.x+g.w, g.y+g.h+4, {align:"right"});
+        y = g.y + g.h + 9;
+      }
+      sub(`Todos los movimientos de ${y0} (${inY.length})`);
+      table(["Fecha", "Cuenta", "Concepto", "Importe", "Saldo cuenta", "Saldo total"],
+        inY.map(m => [m.fecha, m.ac, String(m.concepto||"").slice(0,60) + (m.tr ? " (traspaso)" : ""), (m.importe>0?"+":"") + fmt(m.importe), m.bal==null ? "—" : fmt(m.bal), fmt(m.total)]),
+        { num:[3,4,5], fs:7.2, cs:{2:{cellWidth:62}} });
+    }
+
+    // ---- 9. Comparación ----
+    title("9. Comparación entre años");
+    table(["Año", "Trabajo", "Inmuebles", "Ahorro", "Cuota líquida", "Retenciones", "Resultado", "Patrimonio"],
+      [...$("cmpBody").querySelectorAll("tr")].map(tr => [...tr.children].map(td => td.textContent.replace("Abierto","").trim())), { num:[1,2,3,4,5,6,7] });
+    para("Cada año se calcula con su propia versión guardada. Los años sin guardar no aparecen.");
+
+    // ---- Pie de página ----
+    const n = doc.getNumberOfPages();
+    for (let i=1; i<=n; i++){
+      doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(M, H-12, W-M, H-12);
+      doc.text(PT(`Mi Renta ${y0} · ${user} · estimación orientativa, no sustituye al borrador de la Agencia Tributaria`), M, H-7);
+      doc.text(`Página ${i} de ${n}`, W-M, H-7, {align:"right"});
+    }
+    const safe = String(user).normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase() || "usuario";
+    doc.save(`mi-renta-informe-${y0}-${safe}.pdf`);
+    msg.textContent = `✓ Informe descargado (${n} páginas). Lleva tus datos fiscales: guárdalo en un sitio privado.`;
+  } catch(e){ msg.textContent = `No he podido crear el informe: ${e.message}.`; }
+  btn.disabled = false;
+}
+$("pdfBtn").onclick = generateReport;
+$("pdfBtn").hidden = inFrame; $("pdfNoFile").hidden = !inFrame;
 
 load(); initTabs(); render();
 })();

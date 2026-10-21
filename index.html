@@ -216,6 +216,7 @@ table.inv{min-width:760px}
 .checks li p{margin:2px 0 0;color:var(--muted);font-size:14px;max-width:70ch}
 .checks .chip{margin-top:3px}
 .field .hint{font-size:12px}
+tr.nuevo td,.inm.nuevo{background:var(--accent-soft);transition:background .6s}
 .bkhelp{display:grid;gap:10px;margin-top:8px}
 .bksteps{margin:0;padding-left:20px;display:grid;gap:4px}
 .btn{display:inline-flex;align-items:center;font:600 14px var(--f-body);border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:7px 12px;cursor:pointer}
@@ -497,7 +498,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
     <div id="tab-inv" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-inv" hidden>
       <section class="panel" aria-labelledby="h-cart">
         <div class="panel-head"><h2 id="h-cart">Cartera a 31 de diciembre de <span class="yr">2026</span></h2><button type="button" id="cartAdd" class="primary">+ Añadir</button></div>
-        <p class="note">Sirve para el patrimonio, no para la renta. Precio: para acciones y ETF, la cotización media del cuarto trimestre (o la del 31/12 si es más fácil); para cripto, el valor a 31/12; para un depósito, cantidad 1 y su saldo. Marca «Ext.» si la entidad es extranjera (por ejemplo, un exchange de cripto).</p>
+        <p class="note">Sirve para el patrimonio, no para la renta. Precio: para acciones y ETF, la cotización media del cuarto trimestre (o la del 31/12 si es más fácil); para fondos, el valor liquidativo a 31/12 (cantidad = participaciones); para cripto, el valor a 31/12; para un depósito, cantidad 1 y su saldo. Marca «Ext.» si la entidad es extranjera (por ejemplo, un exchange de cripto).</p>
         <div class="tablebox"><table class="inv"><thead><tr><th class="l">Activo</th><th class="l">Tipo</th><th class="l">Entidad</th><th>Cantidad</th><th>Precio €</th><th>Valor €</th><th class="l">Ext.</th><th></th></tr></thead><tbody id="cartBody"></tbody></table></div>
         <div class="bkgrid" id="cartTot"></div>
       </section>
@@ -1175,9 +1176,8 @@ function renderInm(c){
   document.getElementById("inmTot").innerHTML = `<div class="row tot"><span>Total que tributa por inmuebles</span><span>${eur(c.alqNetoRed)}</span></div>`;
 }
 document.getElementById("inmAdd").onclick = () => {
-  normInm(); const n = state.settings.inmuebles.length+1;
-  state.settings.inmuebles.push({id:uid(), nombre:`Inmueble ${n}`, ing:0, intRep:0, gastos:0, vc:0, pct:100, red:"0.5"});
-  save(); render();
+  const n = (state.settings.inmuebles||[]).length+1;
+  addAndFocus(id => state.settings.inmuebles.push({id, nombre:`Inmueble ${n}`, ing:0, intRep:0, gastos:0, vc:0, pct:100, red:"0.5"}), id => `i-${id}-nombre`);
 };
 document.getElementById("inmList").addEventListener("change", e => {
   const el = e.target, id = el.dataset.iid, k = el.dataset.ik; if (!id) return;
@@ -1877,8 +1877,17 @@ const armDel = (b, listKey, attr) => {
 };
 $("cartBody").addEventListener("click", e => { const b = e.target.closest("[data-cdel]"); if (b) armDel(b, "cartera", "cdel"); });
 $("ventBody").addEventListener("click", e => { const b = e.target.closest("[data-vdel]"); if (b) armDel(b, "ventas", "vdel"); });
-$("cartAdd").onclick = () => { normInm(); state.settings.cartera.push({id:uid(), nombre:"", tipo:"acc", entidad:"", qty:null, precio:null, ext:false}); save(); render(); };
-$("ventAdd").onclick = () => { normInm(); state.settings.ventas.push({id:uid(), nombre:"", tipo:"acc", fecha:"", venta:null, coste:null}); save(); render(); };
+// Añadir fila: quita el foco de la tabla (si no, no se repinta), y lleva a la fila nueva
+function addAndFocus(push, firstId){
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  normInm(); const id = uid(); push(id); save(); render();
+  const el = document.getElementById(firstId(id)); if (!el) return;
+  const tr = el.closest("tr, .inm"); if (tr){ tr.classList.add("nuevo"); setTimeout(() => tr.classList.remove("nuevo"), 2500); }
+  if (el.scrollIntoView) el.scrollIntoView({block:"center", behavior:"smooth"});
+  try { el.focus({preventScroll:true}); } catch(e){ el.focus(); }
+}
+$("cartAdd").onclick = () => addAndFocus(id => state.settings.cartera.push({id, nombre:"", tipo:"fondo", entidad:"", qty:null, precio:null, ext:false}), id => `c-${id}-nombre`);
+$("ventAdd").onclick = () => addAndFocus(id => state.settings.ventas.push({id, nombre:"", tipo:"acc", fecha:"", venta:null, coste:null}), id => `v-${id}-nombre`);
 
 // ---------- Patrimonio a 31/12 ----------
 function patrimonio(){

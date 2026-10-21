@@ -216,6 +216,14 @@ table.inv{min-width:760px}
 .checks li p{margin:2px 0 0;color:var(--muted);font-size:14px;max-width:70ch}
 .checks .chip{margin-top:3px}
 .field .hint{font-size:12px}
+.linkbtn{display:block;border:none;background:none;padding:4px 0 0;color:var(--accent);font:600 13px var(--f-body);cursor:pointer}
+.linkbtn:hover{text-decoration:underline}
+.apoline{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+tr.aporow > td{background:var(--bg);padding:10px 12px}
+.apo{display:grid;gap:10px}
+table.apot{min-width:520px}
+table.apot tfoot td{border-top:2px solid var(--line);font-weight:600}
+input[readonly]{background:var(--bg);color:var(--muted)}
 tr.nuevo td,.inm.nuevo{background:var(--accent-soft);transition:background .6s}
 .bkhelp{display:grid;gap:10px;margin-top:8px}
 .bksteps{margin:0;padding-left:20px;display:grid;gap:4px}
@@ -497,7 +505,8 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
 
     <div id="tab-inv" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-inv" hidden>
       <section class="panel" aria-labelledby="h-cart">
-        <div class="panel-head"><h2 id="h-cart">Cartera a 31 de diciembre de <span class="yr">2026</span></h2><button type="button" id="cartAdd" class="primary">+ Añadir</button></div>
+        <div class="panel-head"><h2 id="h-cart">Cartera a 31 de diciembre de <span class="yr">2026</span></h2><div class="toolbar"><button type="button" id="cartPrev" hidden></button><button type="button" id="cartAdd" class="primary">+ Añadir</button></div></div>
+        <p class="note" id="cartPrevMsg" aria-live="polite"></p>
         <p class="note">Sirve para el patrimonio, no para la renta. Precio: para acciones y ETF, la cotización media del cuarto trimestre (o la del 31/12 si es más fácil); para fondos, el valor liquidativo a 31/12 (cantidad = participaciones); para cripto, el valor a 31/12; para un depósito, cantidad 1 y su saldo. Marca «Ext.» si la entidad es extranjera (por ejemplo, un exchange de cripto).</p>
         <div class="tablebox"><table class="inv"><thead><tr><th class="l">Activo</th><th class="l">Tipo</th><th class="l">Entidad</th><th>Cantidad</th><th>Precio €</th><th>Valor €</th><th class="l">Ext.</th><th></th></tr></thead><tbody id="cartBody"></tbody></table></div>
         <div class="bkgrid" id="cartTot"></div>
@@ -1840,23 +1849,96 @@ showBView(bview);
 const TIPO_INV = {acc:"Acción o ETF", fondo:"Fondo", cripto:"Cripto", dep:"Depósito", otro:"Otro"};
 const fmtQ = n => n==null || n==="" ? "" : Number(n).toLocaleString("es-ES", {maximumFractionDigits:8});
 const optsT = (cur, keys) => keys.map(k => `<option value="${k}"${k===cur?" selected":""}>${TIPO_INV[k]}</option>`).join("");
+// ---------- Registro de aportaciones (compras periódicas de un fondo, ETF, acción o cripto) ----------
+const openApo = new Set();
+const apoSum = it => { const a = it.aportes||[]; return { n:a.length, inv:a.reduce((t,x)=>t+(x.importe||0),0), qty:a.reduce((t,x)=>t+(x.qty||0),0) }; };
+function apoRow(it, A){
+  const list = (it.aportes||[]).slice().sort((a,b) => dkey(a.fecha)-dkey(b.fecha));
+  const f = (ap,k,v,ph) => `<input class="money" type="text" inputmode="decimal" id="ap-${ap.id}-${k}" data-apid="${ap.id}" data-apit="${it.id}" data-ak="${k}" value="${v}" placeholder="${ph}" aria-label="${ph}">`;
+  return `<tr class="aporow"><td colspan="8"><div class="apo">
+    <div class="tablebox"><table class="apot"><thead><tr><th class="l">Fecha</th><th>Importe €</th><th>Participaciones</th><th>Precio de compra €</th><th></th></tr></thead><tbody>
+    ${list.map(ap => `<tr>
+      <td class="l"><input type="text" id="ap-${ap.id}-fecha" data-apid="${ap.id}" data-apit="${it.id}" data-ak="fecha" value="${esc(ap.fecha||"")}" placeholder="dd/mm/aaaa" aria-label="Fecha" style="width:104px"></td>
+      <td>${f(ap,"importe", ap.importe==null?"":fmt(ap.importe), "Importe")}</td>
+      <td>${f(ap,"qty", fmtQ(ap.qty), "Participaciones")}</td>
+      <td>${f(ap,"precio", ap.precio==null?"":fmtQ(ap.precio), "Precio")}</td>
+      <td class="l"><button type="button" class="ghost" data-apdel="${ap.id}" data-apit="${it.id}" aria-label="Quitar aportación">✕</button></td></tr>`).join("") || `<tr><td class="l" colspan="5">Aún no hay aportaciones. Añade la primera compra.</td></tr>`}
+    </tbody>${A.n ? `<tfoot><tr><td class="l">Total</td><td class="num">${fmt(A.inv)}</td><td class="num">${fmtQ(Math.round(A.qty*1e6)/1e6)}</td><td class="num" title="Precio medio de compra">${A.qty?fmtQ(Math.round(A.inv/A.qty*1e4)/1e4):"—"} medio</td><td></td></tr></tfoot>` : ""}</table></div>
+    <div class="toolbar"><button type="button" class="primary" data-apadd="${it.id}">+ Añadir aportación</button></div>
+    <p class="note">Pon el importe y las participaciones que aparecen en la confirmación de compra; si solo sabes el precio (valor liquidativo) de ese día, escribe el importe y el precio y calculo las participaciones. La cantidad de la cartera pasa a ser la suma de las aportaciones. Comprar no tributa: este historial te sirve para ver lo ganado y, el día que vendas, para calcular el coste (se venden primero las participaciones más antiguas).</p>
+  </div></td></tr>`;
+}
+function syncApo(it){
+  if ((it.aportes||[]).length){ it.qty = Math.round(apoSum(it).qty*1e6)/1e6; delete it.valor; }
+}
+$("cartBody").addEventListener("click", e => {
+  const t = e.target.closest("[data-capo]"); if (t){ const id = t.dataset.capo; openApo.has(id) ? openApo.delete(id) : openApo.add(id); render(); return; }
+  const add = e.target.closest("[data-apadd]");
+  if (add){
+    const it = state.settings.cartera.find(x => x.id===add.dataset.apadd); if (!it) return;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    const d = new Date(), z = n => String(n).padStart(2,"0"), id = uid();
+    (it.aportes = it.aportes || []).push({id, fecha:`${z(d.getDate())}/${z(d.getMonth()+1)}/${d.getFullYear()}`, importe:null, qty:null, precio:null});
+    save(); render();
+    const el = document.getElementById(`ap-${id}-importe`); if (el){ el.closest("tr").classList.add("nuevo"); try { el.focus({preventScroll:false}); } catch(_){ el.focus(); } }
+    return;
+  }
+  const del = e.target.closest("[data-apdel]");
+  if (del){
+    if (!del.dataset.armed){ del.dataset.armed = "1"; del.textContent = "¿Seguro? Toca otra vez"; setTimeout(() => { if (del.isConnected){ delete del.dataset.armed; del.textContent = "✕"; } }, 3000); return; }
+    const it = state.settings.cartera.find(x => x.id===del.dataset.apit); if (!it) return;
+    it.aportes = (it.aportes||[]).filter(a => a.id!==del.dataset.apdel); syncApo(it); save(); render();
+  }
+});
+$("cartBody").addEventListener("change", e => {
+  const el = e.target, apid = el.dataset.apid; if (!apid) return;
+  const it = state.settings.cartera.find(x => x.id===el.dataset.apit); const ap = it && (it.aportes||[]).find(a => a.id===apid); if (!ap) return;
+  const k = el.dataset.ak;
+  if (k==="fecha") ap.fecha = getDate(el.value) || el.value;
+  else {
+    const v = parseEs(el.value); ap[k] = v==null ? null : Math.abs(v);
+    const r6 = n => Math.round(n*1e6)/1e6;
+    if (k==="qty" && ap.importe && ap.qty) ap.precio = r6(ap.importe/ap.qty);
+    if (k==="precio" && ap.importe && ap.precio) ap.qty = r6(ap.importe/ap.precio);
+    if (k==="importe" && ap.importe){ if (ap.precio && !ap.qty) ap.qty = r6(ap.importe/ap.precio); else if (ap.qty) ap.precio = r6(ap.importe/ap.qty); }
+  }
+  syncApo(it); el.blur(); save(); render();
+});
+function prevCartera(){
+  const e = store.saved[curYear-1] || store.drafts[curYear-1];
+  return (e && e.data && e.data.settings && Array.isArray(e.data.settings.cartera)) ? e.data.settings.cartera : [];
+}
+$("cartPrev").onclick = () => {
+  const prev = prevCartera(); if (!prev.length) return;
+  normInm();
+  state.settings.cartera = prev.map(x => { const c = JSON.parse(JSON.stringify(x)); delete c.valor; return c; });
+  save(); render();
+  $("cartPrevMsg").textContent = `✓ He traído ${prev.length} ${prev.length===1?"posición":"posiciones"} de ${curYear-1} con sus aportaciones. Actualiza los precios a 31/12/${curYear}.`;
+};
 function renderInv(c){
   const s = state.settings, cart = s.cartera||[], ven = s.ventas||[];
   $("cntInv").textContent = (cart.length + ven.length) || "";
   const cb = $("cartBody"), vb = $("ventBody");
-  keepFocus(cb); cb.innerHTML = cart.length ? cart.map(it => `<tr>
-    <td class="l"><input type="text" id="c-${it.id}-nombre" data-cid="${it.id}" data-ck="nombre" value="${esc(it.nombre||"")}" placeholder="Iberdrola, Bitcoin…" aria-label="Nombre" style="width:170px">${it.src?`<span class="fname">${esc(it.src)}${it.fecha?" · "+esc(it.fecha):""}</span>`:""}</td>
+  keepFocus(cb); cb.innerHTML = cart.length ? cart.map(it => { const A = apoSum(it), open = openApo.has(it.id), gan = valOf(it) - A.inv; return `<tr>
+    <td class="l"><input type="text" id="c-${it.id}-nombre" data-cid="${it.id}" data-ck="nombre" value="${esc(it.nombre||"")}" placeholder="Iberdrola, Bitcoin…" aria-label="Nombre" style="width:170px">${it.src?`<span class="fname">${esc(it.src)}${it.fecha?" · "+esc(it.fecha):""}</span>`:""}
+      ${A.n && it.precio ? `<span class="apoline">Invertido ${fmt(A.inv)} € · <b class="${gan>=0?"pos":"neg"}">${gan>=0?"+":""}${fmt(gan)} € (${A.inv?fmt(gan/A.inv*100,1):"0"} %)</b></span>` : ""}
+      <button type="button" class="linkbtn" id="c-${it.id}-apo" data-capo="${it.id}" aria-expanded="${open}">${open?"▾":"▸"} Aportaciones${A.n?` (${A.n})`:""}</button></td>
     <td class="l"><select id="c-${it.id}-tipo" data-cid="${it.id}" data-ck="tipo" aria-label="Tipo">${optsT(it.tipo, ["acc","fondo","cripto","dep","otro"])}</select></td>
     <td class="l"><input type="text" id="c-${it.id}-ent" data-cid="${it.id}" data-ck="entidad" value="${esc(it.entidad||"")}" placeholder="Entidad" aria-label="Entidad" style="width:120px"></td>
-    <td><input class="money" type="text" inputmode="decimal" id="c-${it.id}-qty" data-cid="${it.id}" data-ck="qty" value="${fmtQ(it.qty)}" aria-label="Cantidad"></td>
+    <td><input class="money" type="text" inputmode="decimal" id="c-${it.id}-qty" data-cid="${it.id}" data-ck="qty" value="${fmtQ(it.qty)}" aria-label="Cantidad"${A.n?' readonly title="Suma de tus aportaciones"':""}></td>
     <td><input class="money" type="text" inputmode="decimal" id="c-${it.id}-precio" data-cid="${it.id}" data-ck="precio" value="${it.precio==null?"":fmt(it.precio)}" aria-label="Precio"></td>
     <td class="num">${fmt(valOf(it))}</td>
     <td class="l"><input type="checkbox" id="c-${it.id}-ext" data-cid="${it.id}" data-ck="ext"${it.ext?" checked":""} aria-label="En entidad extranjera"></td>
-    <td class="l"><button type="button" class="ghost" data-cdel="${it.id}" aria-label="Quitar">✕</button></td></tr>`).join("")
+    <td class="l"><button type="button" class="ghost" data-cdel="${it.id}" aria-label="Quitar">✕</button></td></tr>${open ? apoRow(it, A) : ""}`; }).join("")
     : `<tr><td class="l" colspan="8"><div class="empty">Añade tus acciones, fondos, criptomonedas y depósitos con lo que tengas a 31 de diciembre.</div></td></tr>`;
   const tot = k => cart.filter(i => i.tipo===k).reduce((t,i) => t+valOf(i), 0);
   $("cartTot").innerHTML = Object.keys(TIPO_INV).filter(k => tot(k)).map(k => `<div class="bk"><div class="k">${TIPO_INV[k]}</div><div class="v">${eur(tot(k))}</div></div>`).join("")
     + `<div class="bk"><div class="k">Total cartera</div><div class="v">${eur(cart.reduce((t,i)=>t+valOf(i),0))}</div></div>`;
+  const conA = cart.filter(i => (i.aportes||[]).length), invT = conA.reduce((t,i)=>t+apoSum(i).inv,0), valT = conA.reduce((t,i)=>t+valOf(i),0);
+  if (conA.length) $("cartTot").innerHTML += `<div class="bk"><div class="k">Invertido con aportaciones</div><div class="v">${eur(invT)}</div></div><div class="bk"><div class="k">Ganancia de esas inversiones</div><div class="v ${valT-invT>=0?"pos":"neg"}">${valT-invT>=0?"+":""}${eur(valT-invT)}</div></div>`;
+  // Año nuevo sin cartera: ofrecer traer la del año anterior (con su historial de aportaciones)
+  const prevC = prevCartera(), pb = $("cartPrev");
+  pb.hidden = !(cart.length===0 && prevC.length); pb.textContent = `Traer la cartera de ${curYear-1}`;
   keepFocus(vb); vb.innerHTML = ven.length ? ven.map(v => { const r = (v.venta||0)-(v.coste||0); return `<tr>
     <td class="l"><input type="text" id="v-${v.id}-nombre" data-vid="${v.id}" data-vk="nombre" value="${esc(v.nombre||"")}" placeholder="Qué vendiste" aria-label="Activo" style="width:150px"></td>
     <td class="l"><select id="v-${v.id}-tipo" data-vid="${v.id}" data-vk="tipo" aria-label="Tipo">${optsT(v.tipo, ["acc","fondo","cripto","otro"])}</select></td>

@@ -1758,6 +1758,8 @@ function unified(){
       if (tw){ m.tr = tw.tr = true; nTr++; }
     }
   }
+  // Traspasos a cuentas que no has subido (depósito, otra cuenta…): el banco lo dice en el concepto
+  for (const m of list) if (!m.tr && /traspaso propio|transferencia interna|entre (mis|tus) cuentas/i.test(m.concepto)){ m.tr = true; nTr++; }
   const accts = Object.entries(by).map(([a, ms]) => {
     const withBal = ms.filter(m => m.bal!=null), lastM = withBal[withBal.length-1];
     return { name:a, keys:[...new Set(ms.map(m => m.acct))], n:ms.length, bal: lastM ? lastM.bal : null, fecha: lastM ? lastM.fecha : ms[ms.length-1].fecha };
@@ -2329,10 +2331,13 @@ const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const sinTildes = s => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "");
 // Quien envía o recibe un Bizum o una transferencia: se sustituye por «Persona N» (la misma persona, el mismo número)
 const RE_PERSONA = /\b(bizum(?:\s+(?:enviado|recibido|emitido))?|transferencia(?:\s+(?:emitida|recibida|inmediata|sepa|nacional|ordinaria))*|transf\.?|trf\.?|trans\.?|incoming transfer|outgoing transfer|transfer)(?![a-z])\s*(?:(?:de|a|para|desde|hacia|from|to|for|ordenante|beneficiario)\b\s*:?\s*)?(.*)$/i;
+// Cada nombre de la lista se oculta entero y también palabra a palabra (así «Roberto Ruiz Mena» oculta «ROBERTO» o «Ruiz Men»)
+const hideList = words => { const out = new Set();
+  for (const w of words.split(",").map(x => sinTildes(x).trim()).filter(x => x.length>=2)){ out.add(w); w.split(/\s+/).filter(t => t.length>=3).forEach(t => { out.add(t); if (t.length>=4) out.add(t.slice(0,-1)); }); }
+  return [...out].sort((a,b) => b.length-a.length); };
 function makeAnon(words){
   const people = new Map();
-  const ws = words.split(",").map(w => w.trim()).filter(w => w.length>=2).sort((a,b) => b.length-a.length)
-    .map(w => new RegExp(reEsc(sinTildes(w)).replace(/\s+/g, "\\s+"), "gi"));
+  const ws = hideList(words);
   return s => {
     let t = sinTildes(String(s||"")).replace(/\s+/g, " ").trim();
     t = t.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "[correo]")
@@ -2342,7 +2347,8 @@ function makeAnon(words){
       .replace(/\b\d{4}(?:[ -]\d{4}){2,3}\b/g, "XXXX")
       .replace(/[\d*·xX]*\*{2,}[\d*·xX]*/g, "XXXX")
       .replace(/\d{6,}/g, "XXXX");
-    for (const re of ws) t = t.replace(re, "[oculto]");
+    for (const w of ws) t = t.replace(new RegExp("(^|[^a-z0-9])" + reEsc(w).replace(/\s+/g, "\\s+") + "(?![a-z0-9])", "gi"), "$1[oculto]");
+    t = t.replace(/\[oculto\](?:[\s,]*\[oculto\])+/g, "[oculto]");
     const m = t.match(RE_PERSONA);
     if (m && m[2] && /[a-z]{2,}/i.test(m[2]) && !/^(entre (mis|tus) cuentas|propia|interna)/i.test(m[2])){
       const extra = /n[oó]mina|salario/i.test(m[2]) ? " (nómina)" : "";
@@ -2366,7 +2372,7 @@ function exportRows(){
   const acct = a => {
     if (!anon) return a;
     let t = a;
-    for (const w of words.split(",").map(x => x.trim()).filter(x => x.length>=2)) t = t.replace(new RegExp(reEsc(w), "gi"), "[oculto]");
+    for (const w of hideList(words)) t = t.replace(new RegExp(reEsc(w), "gi"), "[oculto]");
     return t.replace(/\s*···\w{4}/, () => { if (!acctIdx.has(a)) acctIdx.set(a, acctIdx.size+1); return ` (cuenta ${acctIdx.get(a)})`; });
   };
   const fiscal = c => { const t = classify(c); return t && t!=="otro" && t!=="venta" ? TIPOS[t] : ""; };

@@ -610,8 +610,10 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
       <section class="panel" aria-labelledby="h-inm">
         <div class="panel-head">
           <h2 id="h-inm">Inmuebles alquilados</h2>
-          <button type="button" id="inmAdd" class="primary">+ Añadir inmueble</button>
+          <div class="toolbar"><button type="button" id="inmFromMA">🏠 Traer de Mi Alquiler</button><button type="button" id="inmAdd" class="primary">+ Añadir inmueble</button></div>
         </div>
+        <div id="maBox" class="note" hidden></div>
+        <input type="file" id="maFile" accept=".json,application/json" hidden>
         <div id="inmList" class="inmlist"></div>
         <div class="ledger" id="inmTot" style="margin-top:12px"></div>
         <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %.</p>
@@ -1040,7 +1042,8 @@ function compute(over={}){
     const p = (m.pct==null ? 100 : m.pct)/100;
     const ing = Math.max(0, m.ing||0);
     const intRep = Math.min(Math.max(0, m.intRep||0), ing);
-    const gastos = Math.max(0, m.gastos||0), amort = Math.max(0, m.vc||0)*0.03;
+    // Los inmuebles que vienen de Mi Alquiler traen su amortización ya calculada (inmueble por días + muebles)
+    const gastos = Math.max(0, m.gastos||0), amort = m.amort!=null ? Math.max(0, +m.amort||0) : Math.max(0, m.vc||0)*0.03;
     const neto = ing ? (ing - intRep - gastos - amort)*p : 0;
     const redPct = parseFloat(m.red ?? "0.5") || 0;
     const red = neto>0 ? neto*redPct : 0;
@@ -1245,11 +1248,39 @@ function renderInm(c){
         ${f(m,"valor","Valor para el patrimonio (€)", ' title="El mayor entre valor catastral, valor de referencia y precio de compra"')}
         <label class="field">Reducción por vivienda habitual del inquilino<select id="i-${m.id}-red" data-iid="${m.id}" data-ik="red">${RED_OPTS.map(([v,l])=>`<option value="${v}"${String(m.red??"0.5")===v?" selected":""}>${l}</option>`).join("")}</select></label>
       </div>
+      ${m.src==="miAlquiler" ? `<p class="note">🏠 De Mi Alquiler (${new Date(m.srcAt).toLocaleDateString("es-ES")}). Amortización: <b>${eur(m.amort||0)}</b>${m.amortMue ? ` (inmueble ${eur(m.amortInm||0)} + muebles ${eur(m.amortMue)})` : ""}${m.imputacion ? ` · Imputación de rentas por días vacío: ${eur(m.imputacion)}, va aparte en la declaración` : ""}. Si cambias algo en Mi Alquiler, vuelve a traerlo.</p>` : ""}
       <div class="inm-res">Rendimiento neto <b>${eur(r.neto||0)}</b> · reducción <b>${eur(r.red||0)}</b> · tributa <b>${eur(r.netoRed||0)}</b></div>
     </div>`;
   }).join("");
   document.getElementById("inmTot").innerHTML = `<div class="row tot"><span>Total que tributa por inmuebles</span><span>${eur(c.alqNetoRed)}</span></div>`;
 }
+// ---------- Traer los inmuebles de Mi Alquiler (misma web: lee lo que Mi Alquiler deja preparado) ----------
+function maImport(d){
+  const box = document.getElementById("maBox"); box.hidden = false;
+  if (!d || d.app!=="miAlquiler-miRenta" || !d.years){ box.textContent = "Ese archivo no viene de Mi Alquiler."; return; }
+  const y = d.years[curYear];
+  if (!y || !y.declaraciones?.length){ box.textContent = `Mi Alquiler no tiene datos de ${curYear}. Ábrelo, apunta los ingresos y gastos de ese año y vuelve a traerlo.`; return; }
+  const put = dc => {
+    normInm();
+    const at = d.at;
+    state.settings.inmuebles = state.settings.inmuebles.filter(m => m.src!=="miAlquiler").concat(dc.inmuebles.map(x => ({
+      id:"ma-"+x.id, src:"miAlquiler", srcAt:at, nombre:x.nombre, ing:x.ing||0, intRep:x.intRep||0, gastos:x.gastos||0, vc:0, amort:x.amort||0, amortInm:x.amortInm||0, amortMue:x.amortMue||0,
+      pct:x.pct ?? 100, red:String(x.red ?? "0.5"), valor:x.valor||0, imputacion:x.imputacion||0 })));
+    save(); render();
+    const imp = dc.inmuebles.reduce((a,x)=>a+(x.imputacion||0)*(x.pct??100)/100,0);
+    box.innerHTML = `✓ Traídos ${dc.inmuebles.length} inmuebles de «${esc(dc.nombre)}» (${curYear}).${imp>0.005 ? ` Ojo: hay ${eur(imp)} de imputación de rentas por días vacío que Mi Renta aún no suma.` : ""}`;
+  };
+  if (y.declaraciones.length===1) return put(y.declaraciones[0]);
+  box.innerHTML = `¿Qué declaración traigo a «${esc(curUser().name)}»? ` + y.declaraciones.map((dc,i) => `<button type="button" data-ma="${i}">${esc(dc.nombre)}</button>`).join(" ");
+  box.onclick = e => { const b = e.target.closest("[data-ma]"); if (b){ box.onclick = null; put(y.declaraciones[+b.dataset.ma]); } };
+}
+document.getElementById("inmFromMA").onclick = () => {
+  let d = null; try { d = JSON.parse(localStorage.getItem("miAlquiler:paraMiRenta") || "null"); } catch(e){}
+  if (d) return maImport(d);
+  document.getElementById("maBox").hidden = false; document.getElementById("maBox").textContent = "En este aparato no encuentro Mi Alquiler. Elige el archivo «para Mi Renta» que descargaste desde Mi Alquiler (pestaña Renta).";
+  document.getElementById("maFile").click();
+};
+document.getElementById("maFile").onchange = async () => { const f = document.getElementById("maFile").files[0]; document.getElementById("maFile").value = ""; if (!f) return; try { maImport(JSON.parse(await f.text())); } catch(e){ document.getElementById("maBox").hidden = false; document.getElementById("maBox").textContent = "No he podido leer ese archivo."; } };
 document.getElementById("inmAdd").onclick = () => {
   const n = (state.settings.inmuebles||[]).length+1;
   addAndFocus(id => state.settings.inmuebles.push({id, nombre:`Inmueble ${n}`, ing:0, intRep:0, gastos:0, vc:0, pct:100, red:"0.5"}), id => `i-${id}-nombre`);

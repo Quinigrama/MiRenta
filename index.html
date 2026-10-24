@@ -240,6 +240,14 @@ tr.nuevo td,.inm.nuevo{background:var(--accent-soft);transition:background .6s}
 .seg{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--paper)}
 .seg button{border:none;border-radius:0;background:transparent;color:var(--muted);padding:8px 14px}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--paper)}
+.updrop{margin-bottom:14px}
+.routelog{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.routelog:empty{display:none}
+.routelog li{font-size:14px;line-height:1.45;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+.routelog li strong{word-break:break-all}
+.routelog .to{display:inline-block;font-weight:600;color:var(--accent);margin-left:4px}
+.routelog .skip{color:var(--muted)}
+.routelog .bad{color:var(--neg, #a3412f)}
 .dlbox{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:grid;gap:10px}
 .dlbox h3{margin:0;font-size:16px}
 .dlbox .note{margin:0}
@@ -326,6 +334,16 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
     </div>
   </div>
 
+  <section class="panel updrop" aria-labelledby="h-subir">
+    <div class="panel-head"><h2 id="h-subir">Subir documentos</h2><span class="lock">🔒 Se leen en tu navegador. No se sube nada.</span></div>
+    <label class="drop" id="adrop" tabindex="0">
+      <strong>Suelta aquí cualquier documento o pulsa para elegirlo</strong>
+      <span class="hint">Nóminas, extractos de movimientos (PDF, CSV o Excel) y extractos de patrimonio, todo mezclado. Mi Renta reconoce cada uno, lo lleva a su pestaña y no duplica lo que ya tenías.</span>
+      <input type="file" id="afile" accept=".pdf,.csv,.xls,.xlsx,.txt,application/pdf" multiple hidden>
+    </label>
+    <ul class="routelog" id="alog" aria-live="polite"></ul>
+  </section>
+
   <div class="tabs" role="tablist" aria-label="Apartados de la renta">
     <button type="button" role="tab" id="tabbtn-nom" aria-controls="tab-nom" data-tab="nominas">Nóminas<span class="cnt" id="cntNom"></span></button>
     <button type="button" role="tab" id="tabbtn-ban" aria-controls="tab-ban" data-tab="bancos">Bancos<span class="cnt" id="cntBan"></span></button>
@@ -346,9 +364,10 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         <label class="drop" id="drop" tabindex="0">
           <strong>Suelta aquí los PDF o pulsa para elegirlos</strong>
           <span class="hint">Puedes cargar varios a la vez. Si un PDF está protegido con contraseña (suele ser tu DNI), te la pediré aquí mismo.</span>
-          <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+          <input type="file" id="file" accept="application/pdf,.pdf,.csv,.xls,.xlsx,.txt" multiple hidden>
         </label>
         <div id="queue" aria-live="polite"></div>
+        <ul class="routelog" id="nlog" aria-live="polite"></ul>
       </section>
 
       <section class="panel" aria-labelledby="h-tabla">
@@ -428,6 +447,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
           </label>
           <div class="filechips" id="bfiles"></div>
           <p class="note" id="bstatus" aria-live="polite"></p>
+          <ul class="routelog" id="blog" aria-live="polite"></ul>
         </section>
 
         <div class="seg" role="group" aria-label="Vista de Bancos">
@@ -592,9 +612,10 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         <label class="drop" id="pdrop" tabindex="0">
           <strong>Suelta aquí el extracto de patrimonio en PDF o pulsa para elegirlo</strong>
           <span class="hint">Por ejemplo, el «Extracto del patrimonio neto» de Trade Republic. Las acciones y las criptomonedas pasan a Inversiones y el efectivo a tus cuentas. Uno más reciente de la misma entidad sustituye al anterior; los de otras entidades se suman.</span>
-          <input type="file" id="pfile" accept=".pdf,application/pdf" multiple hidden>
+          <input type="file" id="pfile" accept=".pdf,application/pdf,.csv,.xls,.xlsx,.txt" multiple hidden>
         </label>
         <p class="note" id="pstatus" aria-live="polite"></p>
+        <ul class="routelog" id="plog" aria-live="polite"></ul>
         <div class="tablebox"><table style="min-width:540px"><thead><tr><th class="l">Entidad</th><th class="l">Fecha</th><th>Posiciones</th><th>Efectivo €</th><th>Total €</th><th></th></tr></thead><tbody id="pdocs"></tbody></table></div>
         <p class="paramnote" id="pdocNote" hidden></p>
       </section>
@@ -946,13 +967,16 @@ async function tryOpen(name, buf, password){
     }
   }
 }
-function addParsed(name, raw){
+function addParsed(name, raw, hash){
   state.rows = state.rows.filter(r => !r.example);
   const parsed = parseRow(raw, name);
-  const existing = state.rows.find(r => r.file===name);
-  const row = { id: existing?existing.id:uid(), file:name, lines:raw, ...parsed };
+  // La misma nómina con otro nombre de archivo (mismo mes, mismo tipo y mismo devengado) sustituye a la anterior
+  const existing = state.rows.find(r => r.file===name)
+    || (parsed.mes!=null && parsed.dev ? state.rows.find(r => r.mes===parsed.mes && !!r.extra===!!parsed.extra && Math.abs((r.dev||0)-(parsed.dev||0))<0.01) : null);
+  const row = { id: existing?existing.id:uid(), file:name, lines:raw, ...parsed, hash: hash || existing?.hash };
   if (existing) Object.assign(existing, row); else state.rows.push(row);
   sortRows(); save(); render();
+  return existing ? (existing.file!==name ? "replaced" : "updated") : "new";
 }
 const sortRows = () => state.rows.sort((a,b)=>(a.mes??99)-(b.mes??99) || (a.extra?1:0)-(b.extra?1:0));
 
@@ -1331,11 +1355,11 @@ function renderSettings(){
 
 // ---------- Eventos ----------
 const drop = document.getElementById("drop"), fileIn = document.getElementById("file");
-fileIn.addEventListener("change", e => { handleFiles([...e.target.files]); fileIn.value=""; });
+fileIn.addEventListener("change", e => { const fs = [...e.target.files]; fileIn.value=""; routeAndShow(fs, $("nlog")); });
 drop.addEventListener("keydown", e => { if (e.key==="Enter"||e.key===" "){ e.preventDefault(); fileIn.click(); } });
 ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", e => handleFiles([...e.dataTransfer.files]));
+drop.addEventListener("drop", e => routeAndShow([...e.dataTransfer.files], $("nlog")));
 
 tbody.addEventListener("change", e => {
   const el = e.target, id = el.dataset.id, k = el.dataset.k; if (!id) return;
@@ -1544,14 +1568,14 @@ async function readBankSheet(file){
   wb.SheetNames.forEach(n => table.push(...XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:false, defval:"", dateNF:"dd/mm/yyyy"})));
   return {lines:table.map(r=>r.join("  ")), table};
 }
-async function handleBankFiles(list){
+async function handleBankFiles(list, hash){
   const st = $("bstatus"), msgs = [];
   for (const f of list){
     st.textContent = "Leyendo "+f.name+"…";
     try {
       const {lines, table, items} = /\.pdf$/i.test(f.name) ? await readBankPDF(f) : await readBankSheet(f);
       const joined = lines.join(" "), defY = fileYear(joined);
-      const bank = bankOf(f.name, joined), acct = acctOf(bank, joined);
+      const bank = bankOf(f.name, joined); let acct = acctOf(bank, joined);
       let found = table ? fromTable(table, bank, defY) : items ? fromItems(items, bank, defY) : null;
       if (!found || !found.length) found = lines.map(l => fromLine(l, bank, defY)).filter(Boolean);
       found = found.filter(r => !(["div","int"].includes(r.tipo) && r.raw<0)); // cargos que no son cobros
@@ -1561,7 +1585,8 @@ async function handleBankFiles(list){
       // Si vuelves a subir el mismo archivo, sustituye su versión anterior
       state.bank.rows = state.bank.rows.filter(r => !r.example && r.file!==f.name);
       state.bank.all = (state.bank.all||[]).filter(m => m.file!==f.name);
-      const fk = r => [r.banco, r.fecha, (+r.importe||0).toFixed(2), normC(r.concepto)].join("|");
+      // Mismo banco, fecha, importe y tipo = mismo cobro, aunque el PDF y el Excel escriban el concepto distinto
+      const fk = r => [r.banco, r.fecha, (+r.importe||0).toFixed(2), r.tipo, ["venta","otro"].includes(r.tipo) ? normC(r.concepto) : ""].join("|");
       const seenF = new Set(state.bank.rows.map(fk)); let dup = 0, nF = 0;
       for (const r of found){
         const y = yearOf(r.fecha);
@@ -1570,20 +1595,31 @@ async function handleBankFiles(list){
         if (seenF.has(fk(row))){ dup++; continue; }
         state.bank.rows.push(row); nF++;
       }
-      const mk = m => [m.acct, m.fecha, (+m.importe).toFixed(2), m.saldo==null ? "" : (+m.saldo).toFixed(2), normC(m.concepto)].join("|");
+      // Si el archivo no trae el IBAN (o lo trae distinto) pero sus movimientos ya están en una cuenta, es esa cuenta
+      const bk = m => [m.fecha, (+m.importe).toFixed(2), (+m.saldo).toFixed(2)].join("|");
+      const withSaldo = movs.filter(m => m.saldo!=null);
+      if (withSaldo.length){
+        const mine = new Set(withSaldo.map(bk)), hits = {};
+        for (const o of state.bank.all) if (o.saldo!=null && o.acct.startsWith(bank) && mine.has(bk(o))) hits[o.acct] = (hits[o.acct]||0)+1;
+        const best = Object.entries(hits).sort((a,b) => b[1]-a[1])[0];
+        if (best && best[0]!==acct && best[1] >= Math.max(2, Math.ceil(withSaldo.length*0.3))){ msgs.push(`${f.name}: es la misma cuenta que ${best[0]} (coinciden ${best[1]} movimientos), así que lo he unido a ella.`); acct = best[0]; }
+      }
+      // Con saldo, fecha + importe + saldo identifican el movimiento; sin saldo, también el concepto
+      const mk = m => [m.acct, m.fecha, (+m.importe).toFixed(2), m.saldo==null ? normC(m.concepto) : (+m.saldo).toFixed(2)].join("|");
       const seenA = new Set(state.bank.all.map(mk)); let nA = 0;
       for (const m of movs){
         const x = {file:f.name, acct, fecha:m.fecha, concepto:m.concepto, importe:Math.round(m.importe*100)/100, saldo:m.saldo==null ? null : Math.round(m.saldo*100)/100, seq:m.seq, dudoso:m.dudoso};
         if (seenA.has(mk(x))){ dup++; continue; }
         state.bank.all.push(x); nA++;
       }
-      state.bank.files = state.bank.files.filter(x => x.name!==f.name).concat({name:f.name, bank, acct, n:nF, m:nA});
+      state.bank.files = state.bank.files.filter(x => x.name!==f.name).concat({name:f.name, bank, acct, n:nF, m:nA, hash});
       if (!nF && !nA) msgs.push(`En ${f.name} no he encontrado movimientos.`);
       if (dup) msgs.push(`${f.name}: ${dup} movimientos ya estaban en otro extracto y no se han duplicado.`);
     } catch(e){ msgs.push(`No he podido leer ${f.name}: ${e.message}.`); }
   }
   st.textContent = msgs.join(" ");
   save(); render();
+  return msgs;
 }
 
 function bankTotals(withEx){
@@ -1665,11 +1701,11 @@ bClear.onclick = () => {
   clearTimeout(bClearT); bClearT = setTimeout(() => { delete bClear.dataset.armed; bClear.textContent = "Borrar todo"; }, 3500);
 };
 const bdrop = $("bdrop"), bfile = $("bfile");
-bfile.addEventListener("change", e => { handleBankFiles([...e.target.files]); bfile.value = ""; });
+bfile.addEventListener("change", e => { const fs = [...e.target.files]; bfile.value = ""; routeAndShow(fs, $("blog")); });
 bdrop.addEventListener("keydown", e => { if (e.key==="Enter" || e.key===" "){ e.preventDefault(); bfile.click(); } });
 ["dragenter","dragover"].forEach(ev => bdrop.addEventListener(ev, e => { e.preventDefault(); bdrop.classList.add("over"); }));
 ["dragleave","drop"].forEach(ev => bdrop.addEventListener(ev, e => { e.preventDefault(); bdrop.classList.remove("over"); }));
-bdrop.addEventListener("drop", e => handleBankFiles([...e.dataTransfer.files]));
+bdrop.addEventListener("drop", e => routeAndShow([...e.dataTransfer.files], $("blog")));
 
 // ---------- Todas las cuentas: movimientos unificados ----------
 const normC = s => String(s||"").toLowerCase().replace(/\s+/g," ").trim().slice(0,40);
@@ -2132,7 +2168,7 @@ function parsePatDoc(lines, fname){
   if (efectivo==null && resumenEf!=null) efectivo = resumenEf;
   return { entidad, fecha, pos, efectivo, total };
 }
-async function handlePatFiles(list){
+async function handlePatFiles(list, hash){
   const st = $("pstatus"), msgs = [];
   for (const f of list){
     st.textContent = "Leyendo "+f.name+"…";
@@ -2145,7 +2181,7 @@ async function handlePatFiles(list){
       s.cartera = s.cartera.filter(i => i.src!==ent);
       for (const p of d.pos) s.cartera.push({ id:uid(), nombre: p.nombre + (p.ticker ? ` (${p.ticker})` : ""), tipo:p.tipo, entidad:ent, qty:p.qty, precio:p.precio, valor:p.valor,
         ext: !!(p.custodia && !/espa[ñn]a/i.test(p.custodia)), isin:p.isin, src:ent, fecha:d.fecha });
-      s.patDocs = (s.patDocs||[]).filter(x => x.entidad!==ent).concat({ entidad:ent, fecha:d.fecha, file:f.name, n:d.pos.length, efectivo:d.efectivo, total:d.total });
+      s.patDocs = (s.patDocs||[]).filter(x => x.entidad!==ent).concat({ entidad:ent, fecha:d.fecha, file:f.name, n:d.pos.length, efectivo:d.efectivo, total:d.total, hash });
       const sum = d.pos.reduce((t,p) => t+(p.valor||0), 0) + (d.efectivo||0);
       if (d.total!=null && Math.abs(sum - d.total) > 0.05) msgs.push(`${f.name}: la suma leída (${eur(sum)}) no coincide con el total del extracto (${eur(d.total)}). Revisa las posiciones en Inversiones.`);
       const y = yearOf(d.fecha); if (y && y!==curYear) msgs.push(`${f.name} es de ${y} y tienes abierto ${curYear}: lo he guardado en ${curYear}.`);
@@ -2153,6 +2189,7 @@ async function handlePatFiles(list){
   }
   st.textContent = msgs.join(" ");
   save(); render();
+  return msgs;
 }
 function renderPatDocs(){
   const docs = state.settings.patDocs||[];
@@ -2170,11 +2207,80 @@ $("pdocs").addEventListener("click", e => {
   save(); render();
 });
 const pdrop = $("pdrop"), pfile = $("pfile");
-pfile.addEventListener("change", e => { handlePatFiles([...e.target.files]); pfile.value = ""; });
+pfile.addEventListener("change", e => { const fs = [...e.target.files]; pfile.value = ""; routeAndShow(fs, $("plog")); });
 pdrop.addEventListener("keydown", e => { if (e.key==="Enter" || e.key===" "){ e.preventDefault(); pfile.click(); } });
 ["dragenter","dragover"].forEach(ev => pdrop.addEventListener(ev, e => { e.preventDefault(); pdrop.classList.add("over"); }));
 ["dragleave","drop"].forEach(ev => pdrop.addEventListener(ev, e => { e.preventDefault(); pdrop.classList.remove("over"); }));
-pdrop.addEventListener("drop", e => handlePatFiles([...e.dataTransfer.files]));
+pdrop.addEventListener("drop", e => routeAndShow([...e.dataTransfer.files], $("plog")));
+
+// ---------- Subir documentos: reconoce cada archivo y lo lleva a su pestaña ----------
+async function fileHash(buf){
+  try { const h = await crypto.subtle.digest("SHA-256", buf); return [...new Uint8Array(h)].slice(0,16).map(b => b.toString(16).padStart(2,"0")).join(""); }
+  catch(e){ return null; }
+}
+function knownHash(h){
+  if (!h) return null;
+  const b = state.bank.files.find(f => f.hash===h); if (b) return {name:b.name, tab:"Bancos"};
+  const p = (state.settings.patDocs||[]).find(d => d.hash===h); if (p) return {name:p.file, tab:"Patrimonio"};
+  const n = state.rows.find(r => r.hash===h); if (n) return {name:n.file, tab:"Nóminas"};
+  return null;
+}
+const RE_PAT = /patrimonio neto|extracto (de|del) (patrimonio|cartera|posiciones)|posiciones a fecha|resumen de (la )?(cartera|posiciones)|composici[oó]n de (la )?cartera|cartera de valores a/i;
+const RE_NOM = /total devengad|l[ií]quido (a percibir|total)|total a percibir|devengos|contingencias comunes|base (de )?cotizaci[oó]n/i;
+async function classifyDoc(f, buf){
+  if (!/\.pdf$/i.test(f.name) && f.type!=="application/pdf") return {kind:"bank"};
+  if (!window.pdfjsLib) return {kind:"error", msg:"el lector de PDF no ha cargado; recarga la página"};
+  let lines;
+  try { lines = await pdfLines(buf.slice(0)); }
+  catch(e){ return e && e.name==="PasswordException" ? {kind:"nomina-pw"} : {kind:"error", msg:"no se puede abrir el PDF"}; }
+  const text = lines.map(l => l.map(i => i[2]).join(" ")).join("\n");
+  const nMov = allFromItems(lines, fileYear(text)).length;
+  if (RE_PAT.test(text)){ const d = parsePatDoc(lines, f.name); if (d.pos.length || d.efectivo!=null) return {kind:"pat"}; }
+  if (RE_NOM.test(text) && nMov < 15){ const p = parseRow(lines, f.name); if (p && p.dev) return {kind:"nom", lines}; }
+  if (nMov) return {kind:"bank"};
+  const d = parsePatDoc(lines, f.name); if (d.pos.length) return {kind:"pat"};
+  return {kind:"unknown"};
+}
+async function routeFiles(files){
+  const out = [];
+  for (const f of files){
+    const buf = await f.arrayBuffer(), h = await fileHash(buf.slice(0));
+    const k = knownHash(h);
+    if (k && k.name!==f.name){ out.push({f:f.name, cls:"skip", txt:`ya lo tenías subido como «${k.name}» en ${k.tab}. No lo he duplicado.`}); continue; }
+    const c = await classifyDoc(f, buf);
+    if (c.kind==="bank"){ const m = await handleBankFiles([f], h); out.push({f:f.name, to:"Bancos", tab:"bancos", txt:m.join(" ")}); }
+    else if (c.kind==="pat"){ const m = await handlePatFiles([f], h); out.push({f:f.name, to:"Patrimonio", tab:"patrimonio", txt:(m.join(" ") + " Las acciones y la cripto también aparecen en Inversiones.").trim()}); }
+    else if (c.kind==="nom"){ const r = addParsed(f.name, c.lines, h); out.push({f:f.name, to:"Nóminas", tab:"nominas", txt: r==="replaced" ? "ya tenías esta nómina con otro nombre de archivo: la he sustituido, no duplicado." : ""}); }
+    else if (c.kind==="nomina-pw"){ await tryOpen(f.name, buf); out.push({f:f.name, to:"Nóminas", tab:"nominas", txt:"está protegido con contraseña (suele ser tu DNI). Te la pido en la pestaña Nóminas."}); }
+    else if (c.kind==="error") out.push({f:f.name, cls:"bad", txt:`no he podido leerlo: ${c.msg}.`});
+    else out.push({f:f.name, cls:"bad", txt:"no sé qué documento es: no parece una nómina, ni un extracto de movimientos, ni uno de patrimonio. Si es de un banco, prueba a descargarlo en CSV o Excel."});
+  }
+  return out;
+}
+function showRoute(out, el){
+  el.innerHTML = out.map(o => `<li class="${o.cls||""}"><strong>${esc(o.f)}</strong>${o.to ? ` <span class="to">→ ${o.to}</span>` : ""}${o.txt ? ` · ${esc(o.txt)}` : ""}${o.tab ? ` <button type="button" class="ghost" data-tab="${o.tab}">Ver</button>` : ""}</li>`).join("");
+}
+async function routeAndShow(files, el){
+  if (!files.length) return;
+  ["alog","nlog","blog","plog"].forEach(id => { if ($(id)!==el) $(id).innerHTML = ""; });
+  el.innerHTML = `<li>Leyendo ${files.length} documento${files.length>1?"s":""}…</li>`;
+  const out = await routeFiles(files);
+  $("bstatus").textContent = ""; $("pstatus").textContent = "";
+  showRoute(out, el);
+}
+// Los botones «Ver» llevan a la pestaña donde ha ido cada documento
+["alog","nlog","blog","plog"].forEach(id => $(id).addEventListener("click", e => {
+  const b = e.target.closest("[data-tab]"); if (!b) return;
+  showTab(b.dataset.tab); document.querySelector(".tabs")?.scrollIntoView({block:"start", behavior:"smooth"});
+}));
+{
+  const adrop = $("adrop"), afile = $("afile"), alog = $("alog");
+  afile.addEventListener("change", e => { const fs = [...e.target.files]; afile.value = ""; routeAndShow(fs, alog); });
+  adrop.addEventListener("keydown", e => { if (e.key==="Enter" || e.key===" "){ e.preventDefault(); afile.click(); } });
+  ["dragenter","dragover"].forEach(ev => adrop.addEventListener(ev, e => { e.preventDefault(); adrop.classList.add("over"); }));
+  ["dragleave","drop"].forEach(ev => adrop.addEventListener(ev, e => { e.preventDefault(); adrop.classList.remove("over"); }));
+  adrop.addEventListener("drop", e => routeAndShow([...e.dataTransfer.files], alog));
+}
 
 // ---------- Usuarios ----------
 function renderUsers(){

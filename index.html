@@ -1257,6 +1257,16 @@ function renderInm(c){
 // ---------- Traer los inmuebles de Mi Alquiler (misma web: lee lo que Mi Alquiler deja preparado) ----------
 function maImport(d){
   const box = document.getElementById("maBox"); box.hidden = false;
+  // Mi Alquiler con varios usuarios: primero se elige de quién son los inmuebles
+  if (d && d.app==="miAlquiler-miRenta" && Array.isArray(d.usuarios)){
+    if (!d.usuarios.length){ box.textContent = "Mi Alquiler no tiene inmuebles todavía."; return; }
+    if (d.usuarios.length===1) return maImport({ ...d.usuarios[0], app:d.app, at:d.at });
+    const same = d.usuarios.find(u => u.nombre.trim().toLowerCase()===curUser().name.trim().toLowerCase());
+    if (same) return maImport({ ...same, app:d.app, at:d.at });
+    box.innerHTML = `¿De qué usuario de Mi Alquiler traigo los inmuebles a «${esc(curUser().name)}»? ` + d.usuarios.map((u,i) => `<button type="button" data-mau="${i}">${esc(u.nombre)}</button>`).join(" ");
+    box.onclick = e => { const b = e.target.closest("[data-mau]"); if (b){ box.onclick = null; maImport({ ...d.usuarios[+b.dataset.mau], app:d.app, at:d.at }); } };
+    return;
+  }
   if (!d || d.app!=="miAlquiler-miRenta" || !d.years){ box.textContent = "Ese archivo no viene de Mi Alquiler."; return; }
   const y = d.years[curYear];
   if (!y || !y.declaraciones?.length){ box.textContent = `Mi Alquiler no tiene datos de ${curYear}. Ábrelo, apunta los ingresos y gastos de ese año y vuelve a traerlo.`; return; }

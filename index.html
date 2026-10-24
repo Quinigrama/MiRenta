@@ -577,7 +577,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
       <section class="panel" aria-labelledby="h-plan">
         <div class="panel-head"><h2 id="h-plan">Rescate del plan de pensiones</h2><span class="hint">Tributa como rendimiento del trabajo</span></div>
         <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
-          <label class="field">Valor actual (provisión matemática) (€)<input type="text" id="s-planVal" inputmode="decimal"><span class="hint" id="planRest">Se suma a tu patrimonio neto.</span></label>
+          <label class="field">Valor actual (provisión matemática) (€)<input type="text" id="s-planVal" inputmode="decimal"><span class="hint" id="planRest">Se suma a tu patrimonio neto. Es la misma casilla que en Patrimonio.</span></label>
           <label class="field">Importe que rescatas en <span class="yr">2026</span> (€)<input type="text" id="s-resc" inputmode="decimal"></label>
           <label class="field">De ese importe, parte de aportaciones hasta el 31/12/2006 cobrada como capital (€)<input type="text" id="s-resc40" inputmode="decimal"></label>
           <label class="field">Retención que te practica la entidad (€)<input type="text" id="s-retResc" inputmode="decimal"></label>
@@ -647,7 +647,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
           <label class="field">Saldo de tus cuentas a 31/12 (€)<input type="text" id="p-cuentas" inputmode="decimal"><span class="hint" id="pCuentasHint"></span></label>
           <label class="field">Valor de tu vivienda habitual, tu parte (€)<input type="text" id="p-vivienda" inputmode="decimal"><span class="hint">El mayor entre valor catastral, valor de referencia y precio de compra. Exenta hasta 300.000 €.</span></label>
-          <label class="field">Plan de pensiones: valor actual (provisión matemática) (€)<input type="text" id="p-plan" inputmode="decimal"><span class="hint">Es el mismo dato que en la pestaña Plan de pensiones.</span></label>
+          <label class="field">Plan de pensiones: valor actual (provisión matemática) (€)<input type="text" id="p-plan" inputmode="decimal"><span class="hint">Es la misma casilla que en la pestaña Plan de pensiones: si cambias una, cambia la otra.</span></label>
           <label class="field">Otros bienes: coche, joyas, préstamos que te deban… (€)<input type="text" id="p-otros" inputmode="decimal"></label>
           <label class="field">Deudas pendientes a 31/12: hipoteca, préstamos (€)<input type="text" id="p-deudas" inputmode="decimal"></label>
           <label class="field">Saldo en cuentas de bancos extranjeros (€)<input type="text" id="p-extc" inputmode="decimal"><span class="hint">Solo para comprobar el Modelo 720.</span></label>
@@ -2111,7 +2111,7 @@ function patrimonio(){
 function renderPat(){
   renderPatDocs();
   const sp = state.settings;
-  $("planRest").textContent = sp.pPlan && sp.resc>0 ? `Se suma a tu patrimonio neto. Si rescatas ${eur(sp.resc)}, en el plan quedarán ${eur(Math.max(0, sp.pPlan - sp.resc))} y el resto pasará a tu cuenta.` : "Se suma a tu patrimonio neto.";
+  $("planRest").textContent = sp.pPlan && sp.resc>0 ? `Se suma a tu patrimonio neto una sola vez (es la misma casilla que en Patrimonio). Si rescatas ${eur(sp.resc)}, en el plan quedarán ${eur(Math.max(0, sp.pPlan - sp.resc))} y el resto pasará a tu cuenta.` : "Se suma a tu patrimonio neto una sola vez (es la misma casilla que en Patrimonio).";
   const p = patrimonio(), y = curYear;
   $("patNeto").textContent = eur(p.neto);
   $("patSub").textContent = `Bienes ${eur(p.bienes)} · deudas ${eur(p.deudas)}`;

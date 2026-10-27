@@ -929,6 +929,7 @@ const load = () => {
 };
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
+const isExRows = rows => rows.length>0 && rows.every(r => r.example);
 const exampleRows = () => [0,1,2].map(m => ({ id:uid(), example:true, mes:m, extra:false, file:"ejemplo", dev:2650, ss:200.96, irpf:397.50, liq:2051.54, status:"ej", text:"" }));
 
 // ---------- Lectura de PDF ----------
@@ -1111,9 +1112,9 @@ function costeRescate(importe){
 // ---------- Render ----------
 const tbody = document.getElementById("tbody"), tfoot = document.getElementById("tfoot");
 function render(){
-  if (!state.rows.length) state.rows = exampleRows();
-  const isEx = state.rows.every(r=>r.example);
-  document.getElementById("exampleBanner").hidden = !isEx;
+  // Sin datos de ejemplo: si no hay nóminas, la tabla queda vacía
+  state.rows = state.rows.filter(r => !r.example);
+  document.getElementById("exampleBanner").hidden = true;
   const chip = r => r.example ? '<span class="chip ej">Ejemplo</span>'
     : r.status==="man" ? '<span class="chip man">Editado</span>'
     : r.status==="ok" ? '<span class="chip ok" title="Total devengado − total a deducir = líquido">Cuadra</span>'
@@ -1132,7 +1133,7 @@ function render(){
     </tr>`;
     if (openRaw.has(r.id)) html += `<tr class="rawrow"><td colspan="9"><pre>${esc(NominaParser.text(rowLines(r)||[]))}</pre></td></tr>`;
     return html;
-  }).join("");
+  }).join("") || `<tr><td class="l" colspan="9" style="color:var(--muted);padding:18px 8px">Aún no hay nóminas. Carga tus PDF arriba o añade una a mano.</td></tr>`;
   const c = compute();
   const tasaT = c.real.dev ? c.real.irpf/c.real.dev : NaN;
   tfoot.innerHTML = `<tr><td class="l" colspan="2">Total cobrado (${state.rows.length} ${state.rows.length===1?"nómina":"nóminas"})</td>
@@ -1141,7 +1142,7 @@ function render(){
 }
 
 function renderSummary(c){
-  const pay = c.resultado > 0.005, ex = state.rows.every(r=>r.example);
+  const pay = c.resultado > 0.005, ex = isExRows(state.rows);
   const res = document.getElementById("result");
   res.className = "result " + (pay ? "pay" : "refund");
   const sub = `${state.settings.proj ? "Proyectando el año completo" : "Solo con lo cobrado hasta ahora"}${ex?" · nóminas de ejemplo":""}${c.bk?` · ${c.bk.n} movimientos de banco`:""}`;
@@ -1374,7 +1375,7 @@ function renderIdeal(c){
     tile("Sin pagar ni un euro más de IRPF", eur(gratis), gratis>0 ? `Hasta aquí el rescate queda cubierto por tu mínimo personal y las reducciones: el impuesto del año no sube${gratis>=cap?lim:""}.` : "Con tus ingresos, cualquier euro rescatado ya tributa. Mira la columna «Tipo del tramo» de la tabla de abajo.")
     + tile("Sin que la renta te salga a pagar", eur(sinPagar), base>0.005 ? `Sin rescatar ya te sale a pagar ${eur(base)}, así que no hay margen.` : `Ahora te sale a devolver ${eur(-base)}. Rescatando hasta esta cantidad, lo que pagues de más se come esa devolución, sin poner dinero en junio${sinPagar>=cap?lim:""}.`)
     + tile("IRPF que te cuesta ese rescate", eur(costeRescate(sinPagar)), sinPagar ? `Es la devolución a la que renuncias: un ${pct(costeRescate(sinPagar)/sinPagar)} de lo rescatado.` : "Sin rescate no hay coste.");
-  const ex = state.rows.every(r=>r.example);
+  const ex = isExRows(state.rows);
   $("idealNote").innerHTML = `${ex ? "<strong>Ojo: ahora calcula con nóminas de ejemplo.</strong> " : ""}La retención que te aplique Santa Lucía al cobrar no cambia el impuesto final: es un adelanto que se descuenta en la renta. Si rescatas más de 1.500 € y tus rendimientos del trabajo pasan de 15.876 €, tendrás que presentar la declaración (dos pagadores). ${s.proj ? "Calcula con el año proyectado hasta diciembre." : "Calcula solo con lo cobrado hasta ahora."}`;
 }
 function renderRescate(){
@@ -1753,9 +1754,10 @@ function bankTotals(withEx){
 }
 
 function renderBank(){
-  if (!state.bank.rows.length) state.bank.rows = bankExample();
-  const rows = state.bank.rows, isEx = rows.every(r=>r.example);
-  $("bExBanner").hidden = !isEx;
+  // Sin datos de ejemplo: si no hay movimientos, la tabla queda vacía
+  state.bank.rows = state.bank.rows.filter(r => !r.example);
+  const rows = state.bank.rows, isEx = false;
+  $("bExBanner").hidden = true;
   $("bfiles").innerHTML = state.bank.files.map((f,i) => `<span class="filechip"><strong>${esc(f.acct||f.bank)}</strong> · ${esc(f.name)} · ${f.n} fiscales${f.m!=null?` · ${f.m} movimientos`:""} <button type="button" class="ghost" data-fdel="${i}" aria-label="Quitar ${esc(f.name)}">✕</button></span>`).join("");
   const opt = (list, cur) => list.map(([v,l]) => `<option value="${esc(v)}"${v===cur?" selected":""}>${esc(l)}</option>`).join("");
   $("btbody").innerHTML = rows.map(r => {
@@ -1771,7 +1773,7 @@ function renderBank(){
       <td><input class="money" type="text" inputmode="decimal" id="b-${r.id}-ro" data-bid="${r.id}" data-k="retOrigen" value="${fmt(r.retOrigen||0)}"${r.tipo==="div"?"":" disabled"} aria-label="Retención en origen"></td>
       <td class="l"><button type="button" class="ghost" data-bdel="${r.id}" aria-label="Eliminar fila">✕</button></td>
     </tr>`;
-  }).join("");
+  }).join("") || `<tr><td class="l" colspan="9" style="color:var(--muted);padding:18px 8px">Aún no hay movimientos fiscales. Carga tus extractos arriba o añade uno a mano.</td></tr>`;
   const t = bankTotals(isEx) || {div:0,int:0,cus:0,ret:0,ventas:0,foreignRet:0,foreignExc:0,by:{},rcm:0};
   const tile = (k,v,tip) => `<div class="bk"><div class="k">${k}</div><div class="v">${eur(v)}</div>${tip?`<p class="tip">${tip}</p>`:""}</div>`;
   $("bkgrid").innerHTML = tile("Dividendos brutos", t.div) + tile("Intereses brutos", t.int) + tile("Comisiones de custodia", t.cus)
@@ -1781,7 +1783,7 @@ function renderBank(){
   $("bkBank").innerHTML = Object.entries(t.by).map(([b,v]) => `<tr><td class="l">${esc(b)}</td><td class="num">${fmt(v.g)}</td><td class="num">${fmt(v.r)}</td></tr>`).join("") || `<tr><td class="l" colspan="3">Sin movimientos incluidos</td></tr>`;
   $("bresHint").textContent = isEx ? "Ejemplo: no cuenta en la estimación" : "Se suma solo a la estimación";
   $("cntBan").textContent = isEx ? "" : rows.filter(r=>r.inc).length;
-  $("cntNom").textContent = state.rows.every(r=>r.example) ? "" : state.rows.length;
+  $("cntNom").textContent = isExRows(state.rows) ? "" : state.rows.length;
   renderUnified();
 }
 
@@ -2924,7 +2926,7 @@ async function generateReport(){
     };
     const B = t => ({ content:t, styles:{ fontStyle:"bold" } });
     const SEC = (t, n) => ({ content:t, colSpan:n, styles:{ fontStyle:"bold", textColor:ACC, fillColor:[236,242,244] } });
-    const ex = state.rows.every(r=>r.example), bkEx = state.bank.rows.every(r=>r.example);
+    const ex = isExRows(state.rows), bkEx = isExRows(state.bank.rows);
 
     // ---- Portada ----
     doc.setFillColor(...ACC); doc.rect(0, 0, W, 60, "F");

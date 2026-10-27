@@ -1,5 +1,5 @@
 // Mi Renta: funciona sin conexión. Cambia el número de versión si actualizas los iconos o el manifest.
-const CACHE = "mi-renta-v3";
+const CACHE = "mi-renta-v4";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/favicon-64.png"];
 const LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",

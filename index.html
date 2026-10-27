@@ -1735,7 +1735,7 @@ function trStatement(rawLines, defY){
   const T = l => l.map(i => String(i[2]).trim()).filter(Boolean);
   const MES = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
   const RE_D = /^(\d{1,2}) (ene|feb|mar|abr|may|jun|jul|ago|sept?|set|oct|nov|dic)\.?(?:\s+(.*))?$/i, RE_E = /^-?[\d.]+,\d{2}\s?€$/;
-  const FOOT = /trade republic bank gmbh|^creado en|^p[aá]gina \d|^c\/ velazquez|^nif|^28001|registro mercantil|charlottenburg|directores generales|thomas pischke|^fecha$|^tipo$/i;
+  const FOOT = /trade republic bank gmbh|^creado en|^p[aá]gina \d|^c\/ velazquez|^nif|^28001|registro mercantil|charlottenburg|directores generales|thomas pischke|^fecha$|^tipo$|^descripci[oó]n$|^entrada de$|^salida de$|^dinero$|^balance$/i;
   let prev = null, cur = null; const tx = [];
   const close = () => { if (cur) tx.push(cur); cur = null; };
   for (const l of rawLines){
@@ -1743,10 +1743,14 @@ function trStatement(rawLines, defY){
     const t = T(l).flatMap(x => /€.*\d.*€/.test(x) ? x.split(/(?<=€)\s+/) : [x]); if (!t.length) continue;
     if (prev == null && /^cuenta corriente$/i.test(t[0]) && t.length >= 2 && RE_E.test(t[1])) prev = parseAny(t[1]);
     if (/^(transacciones de cuenta|resumen del fondo|resumen de estado)/i.test(t[0]) && cur){ close(); continue; }
+    // Al final viene el resumen del saldo y las notas: ahí se acaban los movimientos
+    if (/^(resumen del balance|notas sobre el extracto|cuentas colectivas)/i.test(t[0])){ close(); break; }
     const d = t[0].match(RE_D);
     if (d){ close(); const mm = d[2].toLowerCase(); cur = { d:+d[1], m:MES[/^se[pt]/.test(mm) ? "sep" : mm], y:null, txt:[], amts:[] }; t.shift(); if (d[3]) t.unshift(d[3]); }
     if (!cur) continue;
     if (t.some(x => FOOT.test(x))){ if (t.every(x => FOOT.test(x) || /^www\./.test(x) || /^(andreas|gernot|christian)/i.test(x) || /^brunnenstrasse|^domicilio|^nif-iva/i.test(x))) continue; }
+    // La cabecera de cada página (FECHA · TIPO · DESCRIPCIÓN…) no es parte del movimiento
+    if (t.length >= 4 && t.filter(x => FOOT.test(x)).length >= 4) continue;
     for (const x of t){
       if (/^20\d{2}$/.test(x) && cur.y == null){ cur.y = +x; continue; }
       if (RE_E.test(x)){ cur.amts.push(parseAny(x)); continue; }

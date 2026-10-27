@@ -619,7 +619,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         <input type="file" id="maFile" accept=".json,application/json" hidden>
         <div id="inmList" class="inmlist"></div>
         <div class="ledger" id="inmTot" style="margin-top:12px"></div>
-        <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %. <strong>Imputación de rentas</strong>: los días que un piso (que no sea tu vivienda habitual) está vacío o sin alquilar tributan el 1,1 % del valor catastral (2 % si no se ha revisado en los últimos 10 años), en proporción a esos días. Un piso que no alquilas en todo el año se añade igual, solo con la imputación.</p>
+        <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %. <strong>Imputación de rentas</strong>: los días que un piso (que no sea tu vivienda habitual) está vacío o sin alquilar tributan el 1,1 % del valor catastral (2 % si el valor del municipio no se revisó con efectos desde 2012), en proporción a esos días. Un piso que no alquilas en todo el año se añade igual, solo con la imputación.</p>
       </section>
     </div>
 
@@ -1266,7 +1266,7 @@ function renderInm(c){
         ${f(m,"vc","Valor de la construcción (amortiza el 3 %) (€)")}
         ${f(m,"pct","Tu parte de la propiedad (%)", ' placeholder="100"')}
         ${f(m,"valor","Valor para el patrimonio (€)", ' title="El mayor entre valor catastral, valor de referencia y precio de compra"')}
-        ${f(m,"imputacion","Imputación de rentas por días vacío o sin alquilar (€)", ' title="1,1 % del valor catastral (2 % si no está revisado) × días sin alquilar ÷ días del año. Sin gastos ni reducción."')}
+        ${f(m,"imputacion","Imputación de rentas por días vacío o sin alquilar (€)", ' title="1,1 % del valor catastral (2 % si el municipio no lo revisó con efectos desde 2012) × días sin alquilar ÷ días del año. Sin gastos ni reducción."')}
         <label class="field">Reducción por vivienda habitual del inquilino<select id="i-${m.id}-red" data-iid="${m.id}" data-ik="red">${RED_OPTS.map(([v,l])=>`<option value="${v}"${String(m.red??"0.5")===v?" selected":""}>${l}</option>`).join("")}</select></label>
       </div>
       ${m.src==="miAlquiler" ? `<p class="note">🏠 De Mi Alquiler (${new Date(m.srcAt).toLocaleDateString("es-ES")}). Amortización: <b>${eur(m.amort||0)}</b>${m.amortMue ? ` (inmueble ${eur(m.amortInm||0)} + muebles ${eur(m.amortMue)})` : ""}${m.imputacion ? ` · Imputación de rentas por días vacío: ${eur(m.imputacion)} (ya sumada)` : ""}. Si cambias algo en Mi Alquiler, vuelve a traerlo.</p>` : ""}

@@ -619,7 +619,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         <input type="file" id="maFile" accept=".json,application/json" hidden>
         <div id="inmList" class="inmlist"></div>
         <div class="ledger" id="inmTot" style="margin-top:12px"></div>
-        <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %. <strong>Imputación de rentas</strong>: los días que un piso (que no sea tu vivienda habitual) está vacío o sin alquilar tributan el 1,1 % del valor catastral (2 % si el valor del municipio no se revisó con efectos desde 2012), en proporción a esos días. Un piso que no alquilas en todo el año se añade igual, solo con la imputación.</p>
+        <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %. Desde el 1/12/2026 (RDL 29/2026) hay porcentajes nuevos para los contratos que se firmen a partir de esa fecha, según suba o baje la renta, y un 80 % en prórroga tácita si los 5 años mínimos acaban después de esa fecha. <strong>Imputación de rentas</strong>: los días que un piso (que no sea tu vivienda habitual) está vacío o sin alquilar tributan el 1,1 % del valor catastral (2 % si el valor del municipio no se revisó con efectos desde 2012), en proporción a esos días. Un piso que no alquilas en todo el año se añade igual, solo con la imputación.</p>
       </section>
     </div>
 
@@ -1239,7 +1239,25 @@ function renderCompare(c){
 }
 
 // ---------- Inmuebles ----------
-const RED_OPTS = [["0.6","60 %: contrato firmado antes del 26/05/2023"],["0.5","50 %: contrato nuevo (caso general)"],["0.7","70 %: zona tensionada, primer alquiler a joven de 18 a 35 años"],["0.6r","60 %: obras de rehabilitación en los 2 años anteriores"],["0.9","90 %: zona tensionada, bajada de renta de más del 5 %"],["0","0 %: turístico, de temporada o por habitaciones"]];
+// Reducción del rendimiento neto por alquiler de vivienda (art. 23.2 LIRPF). Desde el 1/12/2026, RDL 29/2026.
+const RED_GRUPOS = [
+  ["Contratos firmados hasta el 30/11/2026", [["0.6","60 %: contrato firmado antes del 26/05/2023"],["0.5","50 %: contrato desde el 26/05/2023 (caso general)"],["0.7","70 %: zona tensionada, primer alquiler a joven de 18 a 35 años"],["0.6r","60 %: obras de rehabilitación en los 2 años anteriores"],["0.9","90 %: zona tensionada, bajada de renta de más del 5 %"]]],
+  ["Prórroga tácita tras los 5 años mínimos (acabados después del 1/12/2026)", [["0.8","80 %: en prórroga tácita, renta dentro del límite y sin ser gran tenedor"]]],
+  ["Contratos firmados desde el 1/12/2026 (si no eres gran tenedor)", [
+    ["1n","100 %: renta más de un 5 % más baja, al renovar con el mismo inquilino tras los 5 años (o con otro, por debajo del límite)"],
+    ["0.85n","85 %: renta más de un 5 % más baja, inquilino de 18 a 35 años"],
+    ["0.7n","70 %: renta más de un 5 % más baja (resto de casos)"],
+    ["0.5n","50 %: renta igual o más baja que la anterior (hasta un 5 %)"],
+    ["0.4n","40 %: renta que sube hasta un 5 %"],["0.3n","30 %: sube entre el 5 % y el 10 %"],["0.25n","25 %: sube entre el 10 % y el 15 %"],["0.2n","20 %: sube entre el 15 % y el 20 %"],["0.15n","15 %: sube más del 20 %"],
+    ["1p","100 %: primer alquiler de la vivienda, renta por debajo del límite de referencia"],["0.5p","50 %: primer alquiler, renta en o por encima del límite"],
+    ["0.7s","70 %: alquiler social (inquilino Administración o entidad sin ánimo de lucro)"],["0.6rn","60 %: obras de rehabilitación en los 2 años anteriores"]]],
+  ["Sin reducción", [["0","0 %: turístico, de temporada, por habitaciones o no es vivienda habitual"]]]
+];
+const RED_OPTS = RED_GRUPOS.flatMap(g => g[1]);
+// Opciones del desplegable; si viene de Mi Alquiler una media ponderada (varios contratos o prórroga a mitad de año), se añade tal cual
+const redOptsHtml = v => { v = String(v ?? "0.5"); const known = RED_OPTS.some(o => o[0] === v);
+  return (known ? "" : `<option value="${esc(v)}" selected>${fmt((parseFloat(v)||0)*100, 2)} %: media del año (varios contratos o prórroga), de Mi Alquiler</option>`)
+    + RED_GRUPOS.map(([g, l]) => `<optgroup label="${esc(g)}">${l.map(([k, t]) => `<option value="${k}"${v === k ? " selected" : ""}>${esc(t)}</option>`).join("")}</optgroup>`).join(""); };
 function normInm(){
   const st = state.settings;
   if (!Array.isArray(st.inmuebles)){
@@ -1267,7 +1285,7 @@ function renderInm(c){
         ${f(m,"pct","Tu parte de la propiedad (%)", ' placeholder="100"')}
         ${f(m,"valor","Valor para el patrimonio (€)", ' title="El mayor entre valor catastral, valor de referencia y precio de compra"')}
         ${f(m,"imputacion","Imputación de rentas por días vacío o sin alquilar (€)", ' title="1,1 % del valor catastral (2 % si el municipio no lo revisó con efectos desde 2012) × días sin alquilar ÷ días del año. Sin gastos ni reducción."')}
-        <label class="field">Reducción por vivienda habitual del inquilino<select id="i-${m.id}-red" data-iid="${m.id}" data-ik="red">${RED_OPTS.map(([v,l])=>`<option value="${v}"${String(m.red??"0.5")===v?" selected":""}>${l}</option>`).join("")}</select></label>
+        <label class="field">Reducción por vivienda habitual del inquilino<select id="i-${m.id}-red" data-iid="${m.id}" data-ik="red">${redOptsHtml(m.red)}</select></label>
       </div>
       ${m.src==="miAlquiler" ? `<p class="note">🏠 De Mi Alquiler (${new Date(m.srcAt).toLocaleDateString("es-ES")}). Amortización: <b>${eur(m.amort||0)}</b>${m.amortMue ? ` (inmueble ${eur(m.amortInm||0)} + muebles ${eur(m.amortMue)})` : ""}${m.imputacion ? ` · Imputación de rentas por días vacío: ${eur(m.imputacion)} (ya sumada)` : ""}. Si cambias algo en Mi Alquiler, vuelve a traerlo.</p>` : ""}
       <div class="inm-res">Rendimiento neto <b>${eur(r.neto||0)}</b> · reducción <b>${eur(r.red||0)}</b> · tributa <b>${eur(r.netoRed||0)}</b>${r.imp ? ` · imputación <b>${eur(r.imp)}</b>` : ""}</div>

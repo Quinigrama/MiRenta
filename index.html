@@ -1568,7 +1568,10 @@ function classify(t){
 }
 const bankOf = (name, text) => { const s = (name+" "+text.slice(0,5000)).toLowerCase();
   if (s.includes("ibercaja")) return "Ibercaja"; if (s.includes("openbank")) return "Openbank";
-  if (s.includes("trade republic") || s.includes("traderepublic")) return "Trade Republic"; return "Otro"; };
+  if (s.includes("trade republic") || s.includes("traderepublic")) return "Trade Republic";
+  // Sin el nombre del banco: por el código de entidad del número de cuenta (0073 Openbank, 2085 Ibercaja)
+  const cc = s.match(/(?:es\d{2}\s?)?\b(0073|2085)[\s-]?\d{4}\b/); if (cc) return cc[1]==="0073" ? "Openbank" : "Ibercaja";
+  return "Otro"; };
 const cleanConcept = t => String(t).replace(RE_AMT,"").replace(new RegExp(RE_DATE.source,"g"),"").replace(new RegExp(RE_DATE_TXT.source,"gi"),"").replace(/\s{2,}/g," ").trim().slice(0,120);
 // Cifras de una línea, sin porcentajes (tipos de interés, TAE)
 const textAmounts = t => [...String(t).matchAll(RE_AMT)].filter(m => !/^\s*%/.test(t.slice(m.index+m[0].length))).map(m => parseAny(m[0])).filter(n => !isNaN(n));
@@ -1663,16 +1666,65 @@ async function readBankPDF(file){
   const items = await pdfLines(await file.arrayBuffer());
   return {lines:items.map(it => it.map(i=>i[2]).join("  ")), table:null, items};
 }
+// Muchos bancos (Openbank, por ejemplo) descargan un «.xls» que en realidad es una página HTML con una tabla
+function htmlTable(buf){
+  const head = new TextDecoder("latin1").decode(buf.slice(0, 4096));
+  if (!/^\s*(\ufeff|ï»¿)?\s*</.test(head) || !/<table|<html/i.test(head + new TextDecoder("latin1").decode(buf.slice(4096, 200000)))) return null;
+  const cs = (head.match(/charset\s*=\s*["']?([\w-]+)/i) || [])[1] || "utf-8";
+  let txt; try { txt = new TextDecoder(/utf-?8/i.test(cs) ? "utf-8" : cs, { fatal:/utf-?8/i.test(cs) }).decode(buf); } catch(e){ txt = new TextDecoder("windows-1252").decode(buf); }
+  const doc = new DOMParser().parseFromString(txt, "text/html"), table = [];
+  for (const tr of doc.querySelectorAll("tr")){
+    const row = [];
+    for (const td of tr.querySelectorAll("td,th")){ row.push(td.textContent.replace(/\s+/g, " ").trim()); for (let k = 1; k < (+td.getAttribute("colspan") || 1); k++) row.push(""); }
+    if (row.some(c => c)) table.push(row);
+  }
+  return table.length ? table : null;
+}
+// Fechas mezcladas: algunos bancos exportan las fechas con el día ≤ 12 como mes/día («10/05/2026» = 5 de octubre).
+// Se decide cada fecha dudosa por el orden del extracto (más reciente arriba o abajo) y sus vecinas seguras.
+function fixTableDates(tab){
+  const c = tableCols(tab); if (!c || c.cF < 0) return 0;
+  const rows = tab.slice(c.hi + 1), re = /^\s*(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})\s*$/;
+  const P = rows.map(r => { const m = String(r[c.cF] ?? "").match(re); if (!m) return null; let y = +m[3]; if (y < 100) y += 2000; return { a:+m[1], b:+m[2], y }; });
+  const key = (d, m, y) => y * 10000 + m * 100 + d;
+  const sure = P.map(x => !x ? null : x.a > 12 && x.b <= 12 ? key(x.a, x.b, x.y) : x.b > 12 && x.a <= 12 ? key(x.b, x.a, x.y) : x.a === x.b ? key(x.a, x.b, x.y) : null);
+  const ks = sure.filter(k => k != null); let desc = 0, asc = 0;
+  for (let i = 1; i < ks.length; i++){ if (ks[i] < ks[i - 1]) desc++; else if (ks[i] > ks[i - 1]) asc++; }
+  if (!desc && !asc) return 0;
+  const down = desc > asc, ok = (prev, k, next) => (prev == null || (down ? k <= prev : k >= prev)) && (next == null || (down ? k >= next : k <= next));
+  // ¿Las fechas dudosas de este archivo van como día/mes o como mes/día? Gana la que deja el extracto ordenado
+  const breaks = md => { let n = 0, pv = null; P.forEach((x, i) => { if (!x) return; const k = sure[i] ?? (md ? key(x.b, x.a, x.y) : key(x.a, x.b, x.y)); if (pv != null && (down ? k > pv : k < pv)) n++; pv = k; }); return n; };
+  const preferMD = breaks(true) < breaks(false);
+  let prev = null, swapped = 0;
+  P.forEach((x, i) => {
+    if (!x) return;
+    let k = sure[i];
+    if (k == null){
+      let next = null; for (let j = i + 1; j < P.length; j++) if (sure[j] != null){ next = sure[j]; break; }
+      const dm = key(x.a, x.b, x.y), md = key(x.b, x.a, x.y);
+      const first = preferMD ? md : dm, second = preferMD ? dm : md;
+      k = ok(prev, first, next) || !ok(prev, second, next) ? first : second;
+      if (k === md) swapped++;
+    }
+    const d = k % 100, m = Math.floor(k / 100) % 100, y = Math.floor(k / 10000);
+    rows[i][c.cF] = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+    prev = k;
+  });
+  return swapped;
+}
 async function readBankSheet(file){
+  const raw = await file.arrayBuffer(), html = htmlTable(raw);
+  if (html){ fixTableDates(html); return {lines:html.map(r=>r.join("  ")), table:html}; }
   if (!window.XLSX) throw new Error("el lector de Excel no ha cargado; recarga la página");
   let wb;
   if (/\.(csv|txt)$/i.test(file.name)){
     const buf = await file.arrayBuffer(); let txt;
     try { txt = new TextDecoder("utf-8", {fatal:true}).decode(buf); } catch(e){ txt = new TextDecoder("windows-1252").decode(buf); }
     wb = XLSX.read(txt, {type:"string", raw:true});
-  } else wb = XLSX.read(await file.arrayBuffer(), {type:"array", cellDates:true, dateNF:"dd/mm/yyyy"});
+  } else wb = XLSX.read(raw, {type:"array", cellDates:true, dateNF:"dd/mm/yyyy"});
   const table = [];
   wb.SheetNames.forEach(n => table.push(...XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:false, defval:"", dateNF:"dd/mm/yyyy"})));
+  fixTableDates(table);
   return {lines:table.map(r=>r.join("  ")), table};
 }
 async function handleBankFiles(list, hash){
@@ -1829,7 +1881,11 @@ const kDays = k => Date.UTC(Math.floor(k/1e4), Math.floor(k/100)%100-1, k%100)/8
 const kFmt = k => k ? `${String(k%100).padStart(2,"0")}/${String(Math.floor(k/100)%100).padStart(2,"0")}/${Math.floor(k/1e4)}` : "";
 const fileYear = txt => { const c = {}; for (const m of String(txt).matchAll(/\b(20\d{2})\b/g)) c[m[1]] = (c[m[1]]||0)+1; const b = Object.entries(c).sort((a,b)=>b[1]-a[1])[0]; return b ? +b[0] : curYear; };
 // Solo se guardan los 4 últimos dígitos del IBAN, para distinguir cuentas del mismo banco
-const acctOf = (bank, text) => { const m = String(text).match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){4,7}(?: ?[A-Z0-9]{1,3})?\b/); return bank + (m ? " ···" + m[0].replace(/\s/g,"").slice(-4) : ""); };
+const acctOf = (bank, text) => {
+  const m = String(text).match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){4,7}(?: ?[A-Z0-9]{1,3})?\b/); if (m) return bank + " ···" + m[0].replace(/\s/g,"").slice(-4);
+  // Cuenta enmascarada («Número de Cuenta: 0073 0100 59……»): los últimos dígitos visibles
+  const n = String(text).match(/n[uú]mero de cuenta:?\s*((?:\d[\d\s]{6,}\d))/i); if (n){ const d = n[1].replace(/\s/g,""); return bank + " ···" + d.slice(-4); }
+  return bank; };
 
 function allFromItems(rawLines, defY){
   let cols = null, last = null; const out = [];
@@ -2281,7 +2337,33 @@ function parsePatDoc(lines, fname){
     }
   }
   if (efectivo==null && resumenEf!=null) efectivo = resumenEf;
+  if (!pos.length){ const tr = parseInstrTable(lines); if (tr.pos.length){ pos.push(...tr.pos); if (total==null) total = tr.total; } }
+  if (!fecha){ const m = all.match(/a fecha (?:de )?(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i); if (m) fecha = getDate(m[1]); }
   return { entidad, fecha, pos, efectivo, total };
+}
+// Tabla de Trade Republic: VALOR NOMINAL | NOMBRE DEL INSTRUMENTO | PRECIO | (PRECIO DE COMPRA | GANANCIA) | COTIZACIÓN EN EUR
+function parseInstrTable(lines){
+  const T = l => l.map(i => String(i[2]).trim()).filter(Boolean);
+  const all = lines.map(l => T(l).join(" ")).join("\n");
+  const cripto = /criptomoneda|cripto/i.test(all.slice(0, 3000));
+  const pos = []; let inT = false, cur = null, total = null;
+  const QTY = /^-?[\d.]+(,\d+)?$/;
+  for (const l of lines){
+    const t = T(l); if (!t.length) continue; const line = t.join(" ");
+    if (/valor nominal/i.test(line) && /nombre del instrumento|instrumento/i.test(line)){ inT = true; continue; }
+    const tot = line.match(/valores? de mercado totales?:?\s*(-?[\d.]+,\d{2})/i); if (tot){ total = parseAny(tot[1]); inT = false; continue; }
+    if (!inT) continue;
+    if (t.length >= 3 && QTY.test(t[0]) && IS_AMT(t[t.length-1]) && !IS_AMT(t[1])){
+      const nombre = t[1].replace(/\s+/g, " ").trim(), nums = t.slice(2).map(parseAny);
+      const tipo = cripto ? "cripto" : /\b(fund|fondo|fi|fim)\b/i.test(nombre) ? "fondo" : "acc";
+      cur = { nombre, tipo, qty:parseAny(t[0]), precio:nums[0], valor:nums[nums.length-1], coste:nums.length >= 4 ? nums[1] : undefined };
+      pos.push(cur); continue;
+    }
+    if (cur){ const isin = line.match(/\b([A-Z]{2}[A-Z0-9]{9}\d)\b/); if (isin && !cur.isin) cur.isin = isin[1]; }
+  }
+  // El precio del extracto viene redondeado: mejor el que sale del valor de mercado
+  for (const p of pos) if (p.qty) p.precio = Math.round(p.valor / p.qty * 1e6) / 1e6;
+  return { pos, total };
 }
 async function handlePatFiles(list, hash){
   const st = $("pstatus"), msgs = [];
@@ -2340,7 +2422,7 @@ function knownHash(h){
   const n = state.rows.find(r => r.hash===h); if (n) return {name:n.file, tab:"Nóminas"};
   return null;
 }
-const RE_PAT = /patrimonio neto|extracto (de|del) (patrimonio|cartera|posiciones)|posiciones a fecha|resumen de (la )?(cartera|posiciones)|composici[oó]n de (la )?cartera|cartera de valores a/i;
+const RE_PAT = /extracto de (criptomonedas|valores|cartera)|listado de (criptomonedas|valores)|valor nominal.{0,40}nombre del instrumento|patrimonio neto|extracto (de|del) (patrimonio|cartera|posiciones)|posiciones a fecha|resumen de (la )?(cartera|posiciones)|composici[oó]n de (la )?cartera|cartera de valores a/i;
 const RE_NOM = /total devengad|l[ií]quido (a percibir|total)|total a percibir|devengos|contingencias comunes|base (de )?cotizaci[oó]n/i;
 async function classifyDoc(f, buf){
   if (!/\.pdf$/i.test(f.name) && f.type!=="application/pdf") return {kind:"bank"};

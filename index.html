@@ -515,7 +515,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
             </div>
           </div>
           <div id="bExBanner" class="banner" hidden><span>Estas filas son <strong>datos de ejemplo</strong> y no cuentan en la estimación. Desaparecen en cuanto cargues tu primer extracto.</span></div>
-          <p class="note">La <strong>custodia o administración de valores</strong> sí se resta de dividendos e intereses; el <strong>mantenimiento de la cuenta</strong> no desgrava y aparece como «No deducible». <strong>Neto</strong>: el banco te ingresó el importe con el 19 % ya retenido. <strong>Bruto</strong>: la retención aparece en otra línea. Si un importe sale mal (por ejemplo, el saldo en vez del interés), pulsa <strong>⇄</strong> a su lado y elige la cifra correcta de esa línea. En dividendos extranjeros, apunta en «Ret. origen» lo que retuvo el otro país (por ejemplo, el 15 % de EE. UU.).</p>
+          <p class="note">La <strong>custodia o administración de valores</strong> sí se resta de dividendos e intereses; el <strong>mantenimiento de la cuenta</strong> no desgrava y aparece como «No deducible». <strong>Neto</strong>: el banco te ingresó el importe con el 19 % ya retenido (si además hay «Ret. origen», calculo el bruto sumándola: el 19 % español se aplica a lo que llega del extranjero). <strong>Bruto</strong>: el importe antes de cualquier retención; la española aparece en otra línea. Si un importe sale mal (por ejemplo, el saldo en vez del interés), pulsa <strong>⇄</strong> a su lado y elige la cifra correcta de esa línea. En dividendos extranjeros, apunta en «Ret. origen» lo que retuvo el otro país (por ejemplo, el 15 % de EE. UU.).</p>
           <div class="tablebox">
             <table class="bank">
               <thead><tr><th class="l">✓</th><th class="l">Fecha</th><th class="l">Banco</th><th class="l">Concepto</th><th class="l">Tipo</th><th>Importe €</th><th class="l">Neto / bruto</th><th>Ret. origen €</th><th></th></tr></thead>
@@ -546,7 +546,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
             </div>
             <span class="hint" id="ahorroSrc" hidden>Ahora se calculan desde la tabla de movimientos.</span>
           </details>
-          <p class="note">Las pérdidas se compensan con las ganancias del año y, si sobran, con hasta el 25 % de dividendos e intereses. La retención de origen se deduce por doble imposición hasta lo que pagarías en España por ese dividendo.</p>
+          <p class="note">Las pérdidas se compensan con las ganancias del año y, si sobran, con hasta el 25 % de dividendos e intereses. La retención de origen se deduce por doble imposición hasta el 15 % que suelen fijar los convenios y hasta lo que pagarías en España por ese dividendo. Lo que pase del 15 % (Alemania, Suiza…) se reclama a Hacienda del otro país.</p>
         </section>
       </div>
 
@@ -575,14 +575,17 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
 
     <div id="tab-plan" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-plan" hidden>
       <section class="panel" aria-labelledby="h-plan">
-        <div class="panel-head"><h2 id="h-plan">Rescate del plan de pensiones</h2><span class="hint">Tributa como rendimiento del trabajo</span></div>
+        <div class="panel-head"><h2 id="h-plan">Rescate del plan de pensiones</h2><span class="hint" id="planHint">Tributa como rendimiento del trabajo</span></div>
         <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+          <label class="field">¿Qué es tu producto?<select id="s-rescTipo" style="width:100%;min-width:0"><option value="plan">Plan de pensiones o PPA</option><option value="seguro">Seguro de ahorro o de vida</option></select><span class="hint">Lo pone el certificado o la póliza de la entidad.</span></label>
           <label class="field">Valor actual (provisión matemática) (€)<input type="text" id="s-planVal" inputmode="decimal"><span class="hint" id="planRest">Se suma a tu patrimonio neto. Es la misma casilla que en Patrimonio.</span></label>
           <label class="field">Importe que rescatas en <span class="yr">2026</span> (€)<input type="text" id="s-resc" inputmode="decimal"></label>
-          <label class="field">De ese importe, parte de aportaciones hasta el 31/12/2006 cobrada como capital (€)<input type="text" id="s-resc40" inputmode="decimal"></label>
+          <label class="field" data-rt="plan">De ese importe, parte de aportaciones hasta el 31/12/2006 cobrada como capital (€)<input type="text" id="s-resc40" inputmode="decimal"></label>
+          <label class="field" data-rt="plan">Año del primer rescate anticipado o de la jubilación<input type="text" id="s-rescAnio" inputmode="numeric" placeholder="Ej.: 2026"><span class="hint">La reducción del 40 % solo vale ese año y los dos siguientes.</span></label>
+          <label class="field" data-rt="seguro" hidden>Primas que pagaste por lo que rescatas (€)<input type="text" id="s-rescPrimas" inputmode="decimal"><span class="hint">Tributa solo la ganancia: lo rescatado menos estas primas.</span></label>
           <label class="field">Retención que te practica la entidad (€)<input type="text" id="s-retResc" inputmode="decimal"></label>
         </div>
-        <p class="note">La parte de aportaciones hasta 2006 cobrada de una vez tiene una reducción del 40 %. El certificado de la gestora te dice cuánto es.</p>
+        <p class="note" id="planNote">La parte de aportaciones hasta 2006 cobrada de una vez tiene una reducción del 40 %, pero solo en el año en que pides por primera vez el rescate anticipado (aportaciones de más de 10 años) o te jubilas, y en los dos siguientes. Se aplica una sola vez. El certificado de la gestora te dice cuánto es.</p>
       </section>
       <section class="panel" aria-labelledby="h-ideal">
         <div class="panel-head"><h2 id="h-ideal">¿Cuánto puedo rescatar sin que me cueste?</h2><span class="hint">Con tus nóminas, bancos e inversiones de <span class="yr">2026</span></span></div>
@@ -602,21 +605,21 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
             <tbody id="rescBody"></tbody>
           </table>
         </div>
-        <p class="note">«Tipo del tramo» es lo que pagas por cada euro rescatado dentro de ese tramo. El rescate se suma a la nómina como rendimiento del trabajo, así que conviene repartirlo en varios años para quedarte en los tramos bajos. Pon tu importe en «Ajustes de la estimación» para ver el efecto en el resultado.</p>
+        <p class="note">«Tipo del tramo» es lo que pagas por cada euro rescatado dentro de ese tramo. Si es un plan de pensiones, el rescate se suma a la nómina como rendimiento del trabajo, así que conviene repartirlo en varios años para quedarte en los tramos bajos. Pon tu importe en «Ajustes de la estimación» para ver el efecto en el resultado.</p>
       </section>
     </div>
 
     <div id="tab-inm" class="tabpanel" role="tabpanel" aria-labelledby="tabbtn-inm" hidden>
       <section class="panel" aria-labelledby="h-inm">
         <div class="panel-head">
-          <h2 id="h-inm">Inmuebles alquilados</h2>
+          <h2 id="h-inm">Inmuebles alquilados o vacíos</h2>
           <div class="toolbar"><button type="button" id="inmFromMA">🏠 Traer de Mi Alquiler</button><button type="button" id="inmAdd" class="primary">+ Añadir inmueble</button></div>
         </div>
         <div id="maBox" class="note" hidden></div>
         <input type="file" id="maFile" accept=".json,application/json" hidden>
         <div id="inmList" class="inmlist"></div>
         <div class="ledger" id="inmTot" style="margin-top:12px"></div>
-        <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %.</p>
+        <p class="note">Valor de la construcción: el mayor entre lo que pagaste (sin el suelo) y el valor catastral, por el porcentaje de construcción del recibo del IBI. Los intereses y las reparaciones no pueden pasar de lo cobrado en ese inmueble; el exceso se aprovecha en los 4 años siguientes. En la Comunidad de Madrid no hay zonas tensionadas declaradas, así que lo normal es una reducción del 50 % o del 60 %. <strong>Imputación de rentas</strong>: los días que un piso (que no sea tu vivienda habitual) está vacío o sin alquilar tributan el 1,1 % del valor catastral (2 % si no se ha revisado en los últimos 10 años), en proporción a esos días. Un piso que no alquilas en todo el año se añade igual, solo con la imputación.</p>
       </section>
     </div>
 
@@ -853,7 +856,8 @@ const P = {
   estatal: [[12450,.095],[20200,.12],[35200,.15],[60000,.185],[300000,.225],[Infinity,.245]],
   madrid:  [[13362.22,.085],[19004.63,.107],[35425.68,.128],[57320.40,.174],[Infinity,.205]],
   ahorro:  [[6000,.19],[50000,.21],[200000,.23],[300000,.27],[Infinity,.30]],
-  otrosGastos: 2000, smi: 17094, dedSmi: 590.89, dedSmiTope: 20048.45, minE: 5550, minA: 5956.65
+  otrosGastos: 2000, smi: 17094, dedSmi: 590.89, dedSmiTope: 20048.45, minE: 5550, minA: 5956.65,
+  convenioMax: 0.15 // tope habitual de retención en origen deducible según los convenios (EE. UU., Alemania, Francia…)
 };
 const escala = (x, tr) => { let t=0, prev=0; for (const [lim,r] of tr){ if (x<=prev) break; t += (Math.min(x,lim)-prev)*r; prev=lim; } return t; };
 const reduccionTrabajo = rn => rn<=14852 ? 7302 : rn<=17673.52 ? 7302-1.75*(rn-14852) : rn<=19747.5 ? 2364.34-1.14*(rn-17673.52) : 0;
@@ -1014,10 +1018,15 @@ function compute(over={}){
   const projMonths = [];
   if (s.proj){ const used = new Set(rows.map(r=>r.mes)); for (let m=0; m<12 && projMonths.length<remaining; m++) if (!used.has(m)) projMonths.push(m); }
 
-  // Trabajo: nómina + rescate del plan de pensiones
+  // Trabajo: nómina + rescate del plan de pensiones (un seguro de ahorro va al ahorro, solo por la ganancia)
   const RIsal = Math.max(0, real.dev + proj.dev - (s.exentos||0));
-  const resc = Math.max(0, s.resc||0);
-  const rescRed = Math.min(resc, Math.max(0, s.resc40||0)) * 0.4;
+  const rescSeguro = s.rescTipo==="seguro";
+  const rescAll = Math.max(0, s.resc||0);
+  const resc = rescSeguro ? 0 : rescAll;
+  const rescSeg = rescSeguro ? rescAll - Math.max(0, s.rescPrimas||0) : 0;
+  // Reducción del 40 %: solo el año del primer rescate anticipado (o jubilación) y los dos siguientes
+  const rescFuera = !rescSeguro && s.rescAnio>0 && (curYear < s.rescAnio || curYear > s.rescAnio + 2);
+  const rescRed = rescFuera ? 0 : Math.min(resc, Math.max(0, s.resc40||0)) * 0.4;
   const RI = RIsal + resc;
   const RIcomp = RI - rescRed;
   const SS = real.ss + proj.ss;
@@ -1028,7 +1037,7 @@ function compute(over={}){
   const bk = bankTotals(false);
   const ventasInv = (s.ventas||[]).reduce((t,v) => t + ((v.venta||0) - (v.coste||0)), 0);
   const staking = Math.max(0, s.staking||0);
-  const rcm0 = (bk ? bk.rcm : (s.ahorro||0)) + staking, gp0 = (s.gp||0) + (bk ? bk.ventas : 0) + ventasInv;
+  const rcm0 = (bk ? bk.rcm : (s.ahorro||0)) + staking + rescSeg, gp0 = (s.gp||0) + (bk ? bk.ventas : 0) + ventasInv;
   let rcm = rcm0, gp = gp0, cross = 0;
   if (rcm<0 && gp>0){ const c = Math.min(-rcm, gp*0.25); rcm += c; gp -= c; }
   if (gp<0 && rcm>0){ cross = Math.min(-gp, rcm*0.25); gp += cross; rcm -= cross; }
@@ -1047,19 +1056,21 @@ function compute(over={}){
     const neto = ing ? (ing - intRep - gastos - amort)*p : 0;
     const redPct = parseFloat(m.red ?? "0.5") || 0;
     const red = neto>0 ? neto*redPct : 0;
-    return { id:m.id, nombre:m.nombre||"Inmueble", ing:ing*p, intRep:intRep*p, gastos:gastos*p, amort:amort*p, neto, redPct, red, netoRed:neto-red };
+    // Imputación de rentas: días vacío o sin alquilar (1,1 % o 2 % del valor catastral), sin gastos ni reducción
+    const imp = Math.max(0, m.imputacion||0)*p;
+    return { id:m.id, nombre:m.nombre||"Inmueble", ing:ing*p, intRep:intRep*p, gastos:gastos*p, amort:amort*p, neto, redPct, red, netoRed:neto-red, imp };
   });
   const tot = k => inms.reduce((t,m)=>t+m[k],0);
-  const alqIng = tot("ing"), alqNeto = tot("neto"), alqRed = tot("red"), alqNetoRed = tot("netoRed");
+  const alqIng = tot("ing"), alqNeto = tot("neto"), alqRed = tot("red"), alqNetoRed = tot("netoRed"), alqImp = tot("imp");
 
-  const otrasRentas = Math.max(0,rcm0) + Math.max(0,gp0) + Math.max(0,alqNeto);
+  const otrasRentas = Math.max(0,rcm0) + Math.max(0,gp0) + Math.max(0,alqNeto) + alqImp;
 
   const gastos = Math.min(RIcomp, SS + (s.otrosG||0));
   const otros2000 = Math.min(P.otrosGastos, Math.max(0, RIcomp - gastos));
   const RN = Math.max(0, RIcomp - gastos - otros2000);
   const red = otrasRentas>6500 ? 0 : Math.min(RN, reduccionTrabajo(RN));
   const trabNeto = Math.max(0, RN - red);
-  const BLG = Math.max(0, trabNeto + alqNetoRed);
+  const BLG = Math.max(0, trabNeto + alqNetoRed + alqImp);
   const BA = Math.max(0,rcm) + Math.max(0,gp);
   const cuota = (escalaGen, minimo) => {
     const mg = Math.min(minimo, BLG), ma = Math.min(minimo-mg, BA);
@@ -1069,29 +1080,32 @@ function compute(over={}){
   const cE = cuota(P.estatal, s.minE ?? P.minE);
   const cA = cuota(P.madrid, s.minA ?? P.minA);
   const cuotaInt = cE + cA;
+  // Doble imposición internacional (va primero): lo retenido en origen, con el tope del convenio (en general 15 %)
+  // y hasta lo que pagarías en España por esos dividendos
+  const tmA = BA ? escala(BA, P.ahorro)/BA : P.ahorro[0][1];
+  const dedDI = bk ? Math.max(0, Math.min(bk.foreignRetDed, bk.foreignGross*tmA, cuotaInt)) : 0;
+  // Deducción por rendimientos del trabajo (salarios bajos): sobre la cuota ya minorada en la doble imposición
   let dedSmi = 0;
   if (RIsal>0 && RIsal<=P.dedSmiTope && otrasRentas<=6500){
     dedSmi = RIsal<=P.smi ? P.dedSmi : P.dedSmi - 0.2*(RIsal-P.smi);
-    const totalBases = trabNeto + Math.max(0,alqNetoRed) + BA;
+    const totalBases = trabNeto + Math.max(0,alqNetoRed) + alqImp + BA;
     const parteTrabajo = totalBases ? cuotaInt*trabNeto/totalBases*(RIcomp ? RIsal/RIcomp : 1) : 0;
-    dedSmi = Math.max(0, Math.min(dedSmi, parteTrabajo));
+    dedSmi = Math.max(0, Math.min(dedSmi, parteTrabajo, cuotaInt - dedDI));
   }
-  // Doble imposición internacional: lo retenido en origen, hasta lo que pagarías en España por esos dividendos
-  const tmA = BA ? escala(BA, P.ahorro)/BA : P.ahorro[0][1];
-  const dedDI = bk ? Math.max(0, Math.min(bk.foreignRet, bk.foreignGross*tmA, cuotaInt - dedSmi)) : 0;
   const CL = Math.max(0, cuotaInt - dedSmi - dedDI);
   const retAh = bk ? bk.ret : (s.retAh||0);
   const resultado = CL - RET - retAh - retResc;
   return { real, proj, projMonths, avg:{dev:avg("dev"),ss:avg("ss"),irpf:avg("irpf")}, tipoMedioIrpf, extraImp,
-    RIsal, resc, rescRed, RI, RIcomp, SS, gastos, otros2000, RN, red, trabNeto, BLG, BA, otrasRentas,
-    inms, alqIng, alqNeto, alqRed, alqNetoRed, rcm0, gp0, cross, compGP, compRCM, pendFut,
+    RIsal, resc, rescRed, rescSeguro, rescSeg, rescFuera, RI, RIcomp, SS, gastos, otros2000, RN, red, trabNeto, BLG, BA, otrasRentas,
+    inms, alqIng, alqNeto, alqRed, alqNetoRed, alqImp, rcm0, gp0, cross, compGP, compRCM, pendFut,
     cE, cA, cuotaInt, dedSmi, dedDI, bk, ventasInv, staking, CL, RET, retAh, retResc, resultado };
 }
 // Cuánto IRPF añade rescatar una cantidad del plan (misma proporción anterior a 2007 que la indicada)
 function costeRescate(importe){
   const s = state.settings, ratio = s.resc>0 ? Math.min(1,(s.resc40||0)/s.resc) : 0;
-  const base = compute({resc:0, resc40:0, retResc:0}).CL;
-  return compute({resc:importe, resc40:importe*ratio, retResc:0}).CL - base;
+  const primas = s.resc>0 ? Math.min(1,(s.rescPrimas||0)/s.resc) : 0;
+  const base = compute({resc:0, resc40:0, rescPrimas:0, retResc:0}).CL;
+  return compute({resc:importe, resc40:importe*ratio, rescPrimas:importe*primas, retResc:0}).CL - base;
 }
 
 // ---------- Render ----------
@@ -1147,7 +1161,7 @@ function renderSummary(c){
 
   // Casillas de la Renta 2025 (pueden cambiar de número de un año a otro)
   const CAS = { "Nóminas: devengado cobrado":"0003", "Cotizaciones Seguridad Social":"0013", "Cuotas sindicales / colegio":"0014",
-    "Rescate del plan de pensiones":"Trabajo · 2.º pagador", "Reducción 40 % aportaciones hasta 2006":"Trabajo · reducción",
+    "Rescate del plan de pensiones":"Trabajo · 2.º pagador", "Rescate del seguro de ahorro (ganancia)":"Capital mobiliario · seguros", "Imputación de rentas inmobiliarias":"Imputación de rentas", "Reducción 40 % aportaciones hasta 2006":"Trabajo · reducción",
     "Dividendos brutos":"0029", "Intereses brutos":"0027", "Comisiones de custodia":"0037", "Dividendos e intereses (bruto)":"0027 · 0029",
     "Staking y lending de cripto":"0033 (por confirmar)", "Ventas de acciones, fondos y cripto":"0324 fondos · 0339/0340 acciones · 1800 cripto",
     "Otras ganancias o pérdidas":"Ganancias y pérdidas", "Pérdidas anteriores contra ganancias":"0392–0460", "Pérdidas anteriores contra dividendos (25 %)":"0392–0460",
@@ -1161,6 +1175,7 @@ function renderSummary(c){
   if (s.exentos) h += row("Menos devengos exentos", neg(s.exentos), "sub");
   if (c.resc) h += row("Rescate del plan de pensiones", eur(c.resc), "sub");
   if (c.rescRed) h += row("Reducción 40 % aportaciones hasta 2006", neg(c.rescRed), "sub");
+  else if (c.rescFuera && s.resc40>0) h += row(`Sin reducción del 40 %: plazo ${s.rescAnio}–${s.rescAnio+2}`, eur(0), "sub");
   h += row("Rendimientos íntegros", eur(c.RIcomp), "tot");
   h += row("Cotizaciones Seguridad Social", neg(c.SS), "sub");
   if (s.otrosG) h += row("Cuotas sindicales / colegio", neg(s.otrosG), "sub");
@@ -1169,14 +1184,19 @@ function renderSummary(c){
   h += row("Rendimiento neto reducido del trabajo", eur(c.trabNeto), "tot");
   if (c.inms.length){
     h += `<div class="sec">Inmuebles</div>`;
-    for (const m of c.inms) h += row(`${esc(m.nombre)}${m.red?` (reducción ${fmt(m.redPct*100,0)} %)`:""}`, eur(m.netoRed), "sub");
+    for (const m of c.inms) if (m.ing || !m.imp) h += row(`${esc(m.nombre)}${m.red?` (reducción ${fmt(m.redPct*100,0)} %)`:""}`, eur(m.netoRed), "sub");
     h += row("Rendimiento neto reducido de inmuebles", eur(c.alqNetoRed), "tot");
+    if (c.alqImp){
+      for (const m of c.inms) if (m.imp) h += row(`${esc(m.nombre)}: imputación`, eur(m.imp), "sub");
+      h += row("Imputación de rentas inmobiliarias", eur(c.alqImp), "tot");
+    }
   }
   h += row("Base liquidable general", eur(c.BLG), "tot");
   h += `<div class="sec">Ahorro</div>`;
   if (c.bk){ h += row("Dividendos brutos", eur(c.bk.div), "sub"); h += row("Intereses brutos", eur(c.bk.int), "sub"); if (c.bk.cus) h += row("Comisiones de custodia", neg(c.bk.cus), "sub"); }
   else if (Math.abs(c.rcm0 - c.staking) > 0.005) h += row("Dividendos e intereses (bruto)", eur(c.rcm0 - c.staking), "sub");
   if (c.staking) h += row("Staking y lending de cripto", eur(c.staking), "sub");
+  if (c.rescSeguro && s.resc>0) h += row("Rescate del seguro de ahorro (ganancia)", eur(c.rescSeg), "sub");
   if (c.ventasInv) h += row("Ventas de acciones, fondos y cripto", eur(c.ventasInv), "sub");
   if (Math.abs(c.gp0 - c.ventasInv) > 0.005) h += row("Otras ganancias o pérdidas", eur(c.gp0 - c.ventasInv), "sub");
   if (c.cross) h += row("Pérdidas del año compensadas (25 %)", neg(c.cross), "sub");
@@ -1214,7 +1234,7 @@ function renderCompare(c){
   document.getElementById("cmpBody").innerHTML = list.map(y => {
     const r = y===curYear ? {...c, pat:patrimonio()} : computeData(store.saved[y]?.data, y);
     const ret = r.RET + r.retAh + r.retResc;
-    return `<tr${y===curYear?' class="cur"':""}><td class="l num">${y}${y===curYear?' <span class="chip man">Abierto</span>':""}</td><td class="num">${fmt(r.trabNeto)}</td><td class="num">${fmt(r.alqNetoRed)}</td><td class="num">${fmt(r.BA)}</td><td class="num">${fmt(r.CL)}</td><td class="num">${fmt(ret)}</td><td class="num" style="color:var(${r.resultado>0.005?"--pay":"--refund"})">${r.resultado>0.005?"Pagar ":"Devolver "}${fmt(Math.abs(r.resultado))}</td><td class="num">${fmt(r.pat.neto)}</td></tr>`;
+    return `<tr${y===curYear?' class="cur"':""}><td class="l num">${y}${y===curYear?' <span class="chip man">Abierto</span>':""}</td><td class="num">${fmt(r.trabNeto)}</td><td class="num">${fmt(r.alqNetoRed + (r.alqImp||0))}</td><td class="num">${fmt(r.BA)}</td><td class="num">${fmt(r.CL)}</td><td class="num">${fmt(ret)}</td><td class="num" style="color:var(${r.resultado>0.005?"--pay":"--refund"})">${r.resultado>0.005?"Pagar ":"Devolver "}${fmt(Math.abs(r.resultado))}</td><td class="num">${fmt(r.pat.neto)}</td></tr>`;
   }).join("");
 }
 
@@ -1246,13 +1266,15 @@ function renderInm(c){
         ${f(m,"vc","Valor de la construcción (amortiza el 3 %) (€)")}
         ${f(m,"pct","Tu parte de la propiedad (%)", ' placeholder="100"')}
         ${f(m,"valor","Valor para el patrimonio (€)", ' title="El mayor entre valor catastral, valor de referencia y precio de compra"')}
+        ${f(m,"imputacion","Imputación de rentas por días vacío o sin alquilar (€)", ' title="1,1 % del valor catastral (2 % si no está revisado) × días sin alquilar ÷ días del año. Sin gastos ni reducción."')}
         <label class="field">Reducción por vivienda habitual del inquilino<select id="i-${m.id}-red" data-iid="${m.id}" data-ik="red">${RED_OPTS.map(([v,l])=>`<option value="${v}"${String(m.red??"0.5")===v?" selected":""}>${l}</option>`).join("")}</select></label>
       </div>
-      ${m.src==="miAlquiler" ? `<p class="note">🏠 De Mi Alquiler (${new Date(m.srcAt).toLocaleDateString("es-ES")}). Amortización: <b>${eur(m.amort||0)}</b>${m.amortMue ? ` (inmueble ${eur(m.amortInm||0)} + muebles ${eur(m.amortMue)})` : ""}${m.imputacion ? ` · Imputación de rentas por días vacío: ${eur(m.imputacion)}, va aparte en la declaración` : ""}. Si cambias algo en Mi Alquiler, vuelve a traerlo.</p>` : ""}
-      <div class="inm-res">Rendimiento neto <b>${eur(r.neto||0)}</b> · reducción <b>${eur(r.red||0)}</b> · tributa <b>${eur(r.netoRed||0)}</b></div>
+      ${m.src==="miAlquiler" ? `<p class="note">🏠 De Mi Alquiler (${new Date(m.srcAt).toLocaleDateString("es-ES")}). Amortización: <b>${eur(m.amort||0)}</b>${m.amortMue ? ` (inmueble ${eur(m.amortInm||0)} + muebles ${eur(m.amortMue)})` : ""}${m.imputacion ? ` · Imputación de rentas por días vacío: ${eur(m.imputacion)} (ya sumada)` : ""}. Si cambias algo en Mi Alquiler, vuelve a traerlo.</p>` : ""}
+      <div class="inm-res">Rendimiento neto <b>${eur(r.neto||0)}</b> · reducción <b>${eur(r.red||0)}</b> · tributa <b>${eur(r.netoRed||0)}</b>${r.imp ? ` · imputación <b>${eur(r.imp)}</b>` : ""}</div>
     </div>`;
   }).join("");
-  document.getElementById("inmTot").innerHTML = `<div class="row tot"><span>Total que tributa por inmuebles</span><span>${eur(c.alqNetoRed)}</span></div>`;
+  document.getElementById("inmTot").innerHTML = (c.alqImp ? `<div class="row sub"><span>Alquileres (rendimiento neto reducido)</span><span>${eur(c.alqNetoRed)}</span></div><div class="row sub"><span>Imputación de rentas</span><span>${eur(c.alqImp)}</span></div>` : "")
+    + `<div class="row tot"><span>Total que tributa por inmuebles</span><span>${eur(c.alqNetoRed + c.alqImp)}</span></div>`;
 }
 // ---------- Traer los inmuebles de Mi Alquiler (misma web: lee lo que Mi Alquiler deja preparado) ----------
 function maImport(d){
@@ -1278,7 +1300,7 @@ function maImport(d){
       pct:x.pct ?? 100, red:String(x.red ?? "0.5"), valor:x.valor||0, imputacion:x.imputacion||0 })));
     save(); render();
     const imp = dc.inmuebles.reduce((a,x)=>a+(x.imputacion||0)*(x.pct??100)/100,0);
-    box.innerHTML = `✓ Traídos ${dc.inmuebles.length} inmuebles de «${esc(dc.nombre)}» (${curYear}).${imp>0.005 ? ` Ojo: hay ${eur(imp)} de imputación de rentas por días vacío que Mi Renta aún no suma.` : ""}`;
+    box.innerHTML = `✓ Traídos ${dc.inmuebles.length} inmuebles de «${esc(dc.nombre)}» (${curYear}).${imp>0.005 ? ` Incluye ${eur(imp)} de imputación de rentas por días vacío, ya sumada a la base general.` : ""}`;
   };
   if (y.declaraciones.length===1) return put(y.declaraciones[0]);
   box.innerHTML = `¿Qué declaración traigo a «${esc(curUser().name)}»? ` + y.declaraciones.map((dc,i) => `<button type="button" data-ma="${i}">${esc(dc.nombre)}</button>`).join(" ");
@@ -1323,9 +1345,10 @@ function keepFocus(el){
 function renderIdeal(c){
   const s = state.settings, ratio = s.resc>0 ? Math.min(1,(s.resc40||0)/s.resc) : 0;
   const cap = s.pPlan>0 ? s.pPlan : 100000;
-  const res = x => compute({resc:x, resc40:x*ratio, retResc:0}).resultado;
+  const primas = s.resc>0 ? Math.min(1,(s.rescPrimas||0)/s.resc) : 0;
+  const res = x => compute({resc:x, resc40:x*ratio, rescPrimas:x*primas, retResc:0}).resultado;
   const search = ok => { if (!ok(0)) return 0; if (ok(cap)) return cap; let lo = 0, hi = cap; for (let i=0; i<40; i++){ const m = (lo+hi)/2; if (ok(m)) lo = m; else hi = m; } return Math.floor(lo); };
-  const g0 = search(x => costeRescate(x) < 0.5), gratis = g0 < 10 ? 0 : g0;
+  const tol = s.rescTipo==="seguro" ? 0.005 : 0.5, g0 = search(x => costeRescate(x) < tol), gratis = g0 < 10 ? 0 : g0;
   const base = res(0), sinPagar = search(x => res(x) <= 0.005);
   const lim = s.pPlan>0 ? ` (tope: el valor del plan, ${eur(s.pPlan)})` : "";
   const tile = (k, v, t) => `<div class="bk"><div class="k">${k}</div><div class="v">${v}</div><p class="tip">${t}</p></div>`;
@@ -1392,7 +1415,7 @@ function renderChart(c){
   svg.innerHTML = g;
 }
 
-const SET_FIELDS = [["s-staking","staking","money"],["p-cuentas","pCuentas","money"],["p-vivienda","pVivienda","money"],["p-plan","pPlan","money"],["s-planVal","pPlan","money"],["p-otros","pOtros","money"],["p-deudas","pDeudas","money"],["p-extc","pExtCuentas","money"],["p-donac","pDonac","money"],["b-gp","gp","money"],["b-perdAnt","perdAnt","money"],["s-extraN","extraN","int"],["s-extraImp","extraImp","money"],["s-exentos","exentos","money"],["s-otrosG","otrosG","money"],["s-ahorro","ahorro","money"],["s-retAh","retAh","money"],["s-resc","resc","money"],["s-resc40","resc40","money"],["s-retResc","retResc","money"],["s-minE","minE","money"],["s-minA","minA","money"]];
+const SET_FIELDS = [["s-rescPrimas","rescPrimas","money"],["s-staking","staking","money"],["p-cuentas","pCuentas","money"],["p-vivienda","pVivienda","money"],["p-plan","pPlan","money"],["s-planVal","pPlan","money"],["p-otros","pOtros","money"],["p-deudas","pDeudas","money"],["p-extc","pExtCuentas","money"],["p-donac","pDonac","money"],["b-gp","gp","money"],["b-perdAnt","perdAnt","money"],["s-extraN","extraN","int"],["s-extraImp","extraImp","money"],["s-exentos","exentos","money"],["s-otrosG","otrosG","money"],["s-ahorro","ahorro","money"],["s-retAh","retAh","money"],["s-resc","resc","money"],["s-resc40","resc40","money"],["s-retResc","retResc","money"],["s-minE","minE","money"],["s-minA","minA","money"]];
 function renderSettings(){
   const s = state.settings;
   document.getElementById("proj").checked = !!s.proj;
@@ -1401,6 +1424,16 @@ function renderSettings(){
     el.value = t==="int" ? (s[k]||0) : (s[k]==null||(s[k]===0 && !["minE","minA"].includes(k)) ? "" : fmt(s[k]));
   }
   for (const k of ["dev","ss","irpf","liq"]){ const el=document.getElementById("lab-"+k); if (document.activeElement!==el) el.value = state.labels[k].join("\n"); }
+  // Plan de pensiones o seguro de ahorro
+  const seg = s.rescTipo==="seguro";
+  document.getElementById("s-rescTipo").value = seg ? "seguro" : "plan";
+  if (document.activeElement!==document.getElementById("s-rescAnio")) document.getElementById("s-rescAnio").value = s.rescAnio>0 ? s.rescAnio : "";
+  document.querySelectorAll("[data-rt]").forEach(el => { el.hidden = el.dataset.rt !== (seg ? "seguro" : "plan"); });
+  document.getElementById("planHint").textContent = seg ? "Tributa en la base del ahorro, solo por la ganancia" : "Tributa como rendimiento del trabajo";
+  const fuera = !seg && s.rescAnio>0 && (curYear < s.rescAnio || curYear > s.rescAnio + 2);
+  document.getElementById("planNote").innerHTML = seg
+    ? "Un seguro de ahorro no es un plan de pensiones: al rescatarlo tributa como rendimiento del capital mobiliario (base del ahorro, del 19 % al 30 %) y solo por la diferencia entre lo que cobras y las primas que pagaste por esa parte. No tiene reducción del 40 % ni se suma a la nómina."
+    : `La parte de aportaciones hasta 2006 cobrada de una vez tiene una reducción del 40 %, pero solo en el año en que pides por primera vez el rescate anticipado (aportaciones de más de 10 años) o te jubilas, y en los dos siguientes. Se aplica una sola vez. El certificado de la gestora te dice cuánto es.${fuera ? ` <strong>En ${curYear} ya no se aplica: tu plazo fue de ${s.rescAnio} a ${s.rescAnio+2}.</strong>` : ""}`;
   const bk = bankTotals(false), a = document.getElementById("s-ahorro"), r = document.getElementById("s-retAh");
   a.readOnly = r.readOnly = !!bk; document.getElementById("ahorroSrc").hidden = !bk;
   if (bk){ a.value = fmt(bk.rcm); r.value = fmt(bk.ret); }
@@ -1456,6 +1489,8 @@ for (const [id,k,t] of SET_FIELDS){
     save(); render();
   });
 }
+document.getElementById("s-rescTipo").addEventListener("change", e => { state.settings.rescTipo = e.target.value; save(); render(); });
+document.getElementById("s-rescAnio").addEventListener("change", e => { const y = parseInt(e.target.value); state.settings.rescAnio = y>=1990 && y<=2100 ? y : 0; save(); render(); });
 for (const k of ["dev","ss","irpf","liq"]){
   document.getElementById("lab-"+k).addEventListener("change", e => { state.labels[k] = e.target.value.split("\n").map(s=>s.trim()).filter(Boolean); save(); });
 }
@@ -1678,14 +1713,19 @@ async function handleBankFiles(list, hash){
 function bankTotals(withEx){
   const rs = state.bank.rows.filter(r => r.inc && (withEx || !r.example));
   if (!rs.length) return null;
-  const t = {div:0, int:0, cus:0, ret:0, ventas:0, foreignRet:0, foreignGross:0, by:{}, n:rs.length};
+  const t = {div:0, int:0, cus:0, ret:0, ventas:0, foreignRet:0, foreignRetDed:0, foreignGross:0, foreignExc:0, by:{}, n:rs.length};
   for (const r of rs){
     const b = t.by[r.banco] = t.by[r.banco] || {g:0, r:0};
     const imp = r.importe || 0;
     if (r.tipo==="div" || r.tipo==="int"){
-      let g = imp, rt = 0; if (r.modo==="neto"){ g = imp/0.81; rt = g-imp; }
+      // Neto: llega tras la retención de origen (si la hay) y el 19 % español sobre lo que llega
+      const ro = r.tipo==="div" ? Math.max(0, r.retOrigen||0) : 0;
+      let g = imp, rt = 0; if (r.modo==="neto"){ const tras = imp/0.81; rt = tras-imp; g = tras + ro; }
       t[r.tipo] += g; t.ret += rt; b.g += g; b.r += rt;
-      if (r.tipo==="div" && r.retOrigen>0){ t.foreignRet += r.retOrigen; t.foreignGross += g; }
+      if (ro>0){
+        const ded = Math.min(ro, g*P.convenioMax);
+        t.foreignRet += ro; t.foreignRetDed += ded; t.foreignExc += ro - ded; t.foreignGross += g;
+      }
     } else if (r.tipo==="ret"){ t.ret += imp; b.r += imp; }
     else if (r.tipo==="cus") t.cus += imp;
     else if (r.tipo==="venta") t.ventas += imp;
@@ -1714,10 +1754,12 @@ function renderBank(){
       <td class="l"><button type="button" class="ghost" data-bdel="${r.id}" aria-label="Eliminar fila">✕</button></td>
     </tr>`;
   }).join("");
-  const t = bankTotals(isEx) || {div:0,int:0,cus:0,ret:0,ventas:0,foreignRet:0,by:{},rcm:0};
-  const tile = (k,v) => `<div class="bk"><div class="k">${k}</div><div class="v">${eur(v)}</div></div>`;
+  const t = bankTotals(isEx) || {div:0,int:0,cus:0,ret:0,ventas:0,foreignRet:0,foreignExc:0,by:{},rcm:0};
+  const tile = (k,v,tip) => `<div class="bk"><div class="k">${k}</div><div class="v">${eur(v)}</div>${tip?`<p class="tip">${tip}</p>`:""}</div>`;
   $("bkgrid").innerHTML = tile("Dividendos brutos", t.div) + tile("Intereses brutos", t.int) + tile("Comisiones de custodia", t.cus)
-    + tile("Retenido en España", t.ret) + tile("Retenido en origen", t.foreignRet) + (t.ventas ? tile("Ventas (resultado)", t.ventas) : "");
+    + tile("Retenido en España", t.ret)
+    + tile("Retenido en origen", t.foreignRet, t.foreignExc>0.005 ? `${eur(t.foreignExc)} pasan del 15 % del convenio: no se deducen aquí; se piden al país de origen.` : "")
+    + (t.ventas ? tile("Ventas (resultado)", t.ventas) : "");
   $("bkBank").innerHTML = Object.entries(t.by).map(([b,v]) => `<tr><td class="l">${esc(b)}</td><td class="num">${fmt(v.g)}</td><td class="num">${fmt(v.r)}</td></tr>`).join("") || `<tr><td class="l" colspan="3">Sin movimientos incluidos</td></tr>`;
   $("bresHint").textContent = isEx ? "Ejemplo: no cuenta en la estimación" : "Se suma solo a la estimación";
   $("cntBan").textContent = isEx ? "" : rows.filter(r=>r.inc).length;
@@ -2977,7 +3019,7 @@ async function generateReport(){
 
     // ---- 5. Plan de pensiones ----
     title("5. Plan de pensiones");
-    table(["Dato", "Importe"], [["Valor actual (provisión matemática)", eur(s.pPlan||0)], ["Rescate previsto en el año", eur(c.resc)], ["Reducción del 40 % (aportaciones hasta 2006)", eur(c.rescRed)], ["Retención de la gestora", eur(c.retResc)]], { num:[1] });
+    table(["Dato", "Importe"], [["Valor actual (provisión matemática)", eur(s.pPlan||0)], ["Tipo de producto", c.rescSeguro ? "Seguro de ahorro (base del ahorro)" : "Plan de pensiones o PPA (trabajo)"], ["Rescate previsto en el año", eur(c.rescSeguro ? (s.resc||0) : c.resc)], ...(c.rescSeguro ? [["Ganancia que tributa en el ahorro", eur(c.rescSeg)]] : [["Reducción del 40 % (aportaciones hasta 2006)", eur(c.rescRed)]]), ["Retención de la gestora", eur(c.retResc)]], { num:[1] });
     const tiles = [...$("idealTiles").querySelectorAll(".bk")].map(b => [b.querySelector(".k").textContent, b.querySelector(".v").textContent, b.querySelector(".tip")?.textContent || ""]);
     if (tiles.length){ sub("¿Cuánto puedo rescatar sin que me cueste?"); table(["Escenario", "Importe", "Explicación"], tiles, { num:[1], cs:{2:{cellWidth:100}} }); }
     const resc = [...$("rescBody").querySelectorAll("tr")].map(tr => [...tr.children].map(td => td.textContent));
@@ -2990,7 +3032,7 @@ async function generateReport(){
       const src = (s.inmuebles||[]).find(x => x.id===m.id) || {};
       sub(m.nombre);
       table(["Concepto", "Importe"], [["Rentas cobradas (tu parte)", eur(m.ing)], ["Intereses y reparaciones", eur(m.intRep)], ["IBI, comunidad, seguro y otros", eur(m.gastos)], ["Amortización (3 %)", eur(m.amort)],
-        ["Rendimiento neto", B(eur(m.neto))], [`Reducción (${fmt(m.redPct*100,0)} %)`, eur(m.red)], ["Rendimiento que tributa", B(eur(m.netoRed))], ["Tu parte de la propiedad", `${fmt(src.pct==null?100:src.pct,0)} %`], ["Valor para el patrimonio", eur((src.valor||0))]], { num:[1] });
+        ["Rendimiento neto", B(eur(m.neto))], [`Reducción (${fmt(m.redPct*100,0)} %)`, eur(m.red)], ["Rendimiento que tributa", B(eur(m.netoRed))], ...(m.imp ? [["Imputación de rentas (días vacío)", B(eur(m.imp))]] : []), ["Tu parte de la propiedad", `${fmt(src.pct==null?100:src.pct,0)} %`], ["Valor para el patrimonio", eur((src.valor||0))]], { num:[1] });
     }
 
     // ---- 7. Patrimonio ----

@@ -1727,6 +1727,63 @@ async function readBankSheet(file){
   fixTableDates(table);
   return {lines:table.map(r=>r.join("  ")), table};
 }
+// ---------- Extracto de cuenta de Trade Republic ----------
+// Cada movimiento ocupa varias líneas: «14 ene» · tipo + descripción + importe + saldo · «2026».
+// El signo sale del saldo (sube o baja), así los dividendos anulados y vueltos a pagar no se cuentan dos veces.
+const isTRStatement = t => /trade republic/i.test(t) && /transacciones de cuenta|resumen de estado de cuenta/i.test(t);
+function trStatement(rawLines, defY){
+  const T = l => l.map(i => String(i[2]).trim()).filter(Boolean);
+  const MES = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
+  const RE_D = /^(\d{1,2}) (ene|feb|mar|abr|may|jun|jul|ago|sept?|set|oct|nov|dic)\.?(?:\s+(.*))?$/i, RE_E = /^-?[\d.]+,\d{2}\s?€$/;
+  const FOOT = /trade republic bank gmbh|^creado en|^p[aá]gina \d|^c\/ velazquez|^nif|^28001|registro mercantil|charlottenburg|directores generales|thomas pischke|^fecha$|^tipo$/i;
+  let prev = null, cur = null; const tx = [];
+  const close = () => { if (cur) tx.push(cur); cur = null; };
+  for (const l of rawLines){
+    // Celdas con dos importes juntos («6.854,68 € 21.199,78 €») se separan
+    const t = T(l).flatMap(x => /€.*\d.*€/.test(x) ? x.split(/(?<=€)\s+/) : [x]); if (!t.length) continue;
+    if (prev == null && /^cuenta corriente$/i.test(t[0]) && t.length >= 2 && RE_E.test(t[1])) prev = parseAny(t[1]);
+    if (/^(transacciones de cuenta|resumen del fondo|resumen de estado)/i.test(t[0]) && cur){ close(); continue; }
+    const d = t[0].match(RE_D);
+    if (d){ close(); const mm = d[2].toLowerCase(); cur = { d:+d[1], m:MES[/^se[pt]/.test(mm) ? "sep" : mm], y:null, txt:[], amts:[] }; t.shift(); if (d[3]) t.unshift(d[3]); }
+    if (!cur) continue;
+    if (t.some(x => FOOT.test(x))){ if (t.every(x => FOOT.test(x) || /^www\./.test(x) || /^(andreas|gernot|christian)/i.test(x) || /^brunnenstrasse|^domicilio|^nif-iva/i.test(x))) continue; }
+    for (const x of t){
+      if (/^20\d{2}$/.test(x) && cur.y == null){ cur.y = +x; continue; }
+      if (RE_E.test(x)){ cur.amts.push(parseAny(x)); continue; }
+      cur.txt.push(x.replace(/null$/, ""));
+    }
+  }
+  close();
+  const isinName = {};
+  for (const x of tx){ const m = x.txt.join(" ").match(/\b([A-Z]{2}[A-Z0-9]{9}\d)\s+(.+?),\s*quantity/); if (m && !isinName[m[1]]) isinName[m[1]] = m[2].replace(/\s+(S\.?A\.?(?=\s|$)|INH\.|EO\b|-?,\d+|\d+\b).*$/i, "").trim(); }
+  const movs = [], found = [];
+  for (const x of tx){
+    if (x.amts.length < 2) continue;
+    const amt = x.amts[x.amts.length - 2], bal = x.amts[x.amts.length - 1];
+    const text = x.txt.join(" ").replace(/\s+/g, " ").trim();
+    let sign = 1;
+    if (prev != null){ if (Math.abs(prev - amt - bal) < 0.015) sign = -1; else if (Math.abs(prev + amt - bal) < 0.015) sign = 1; else sign = /tarjeta|buy trade|savings plan|outgoing|pago|cargo/i.test(text) ? -1 : 1; }
+    else if (/tarjeta|buy trade|savings plan|outgoing/i.test(text)) sign = -1;
+    prev = bal;
+    const fecha = `${String(x.d).padStart(2,"0")}/${String(x.m).padStart(2,"0")}/${x.y || defY}`;
+    const isin = (text.match(/\b([A-Z]{2}[A-Z0-9]{9}\d)\b/) || [])[1];
+    const quien = isin ? (isinName[isin] ? ` ${isinName[isin]} (${isin})` : ` ${isin}`) : "";
+    let tipo = null, concepto = text;
+    if (/interest payment|^inter[eé]s/i.test(text)){ tipo = "int"; concepto = "Intereses de la cuenta"; }
+    else if (/dividend|^rentabilidad/i.test(text)){ tipo = "div"; concepto = (/liquidation/i.test(text) ? (/^ES06/.test(isin || "") ? "Retribución flexible (venta de derechos)" : "Pago por liquidación") : "Dividendo") + quien; }
+    else if (/sell trade/i.test(text)){ tipo = "venta"; concepto = "Venta" + quien; }
+    else if (/buy trade|savings plan/i.test(text)) concepto = (/savings plan/i.test(text) ? "Plan de inversión" : "Compra") + quien;
+    else if (/cash reward/i.test(text)) concepto = "Bonificación (cash reward)";
+    movs.push({ fecha, concepto:concepto.slice(0,120), importe:sign * amt, saldo:bal });
+    if (tipo) found.push({ fecha, banco:"Trade Republic", concepto, tipo, raw:sign * amt, alts:[amt] });
+  }
+  // Un cobro anulado (cargo por el mismo importe) se descuenta del cobro original
+  for (const r of found.filter(r => (r.tipo==="div" || r.tipo==="int") && r.raw < 0)){
+    const o = found.find(x => x !== r && !x.anulado && x.tipo===r.tipo && x.concepto===r.concepto && Math.abs(x.raw + r.raw) < 0.005 && x.raw > 0);
+    if (o){ o.anulado = true; r.anulado = true; }
+  }
+  return { movs, found:found.filter(r => !r.anulado) };
+}
 async function handleBankFiles(list, hash){
   const st = $("bstatus"), msgs = [];
   for (const f of list){
@@ -1735,10 +1792,11 @@ async function handleBankFiles(list, hash){
       const {lines, table, items} = /\.pdf$/i.test(f.name) ? await readBankPDF(f) : await readBankSheet(f);
       const joined = lines.join(" "), defY = fileYear(joined);
       const bank = bankOf(f.name, joined); let acct = acctOf(bank, joined);
-      let found = table ? fromTable(table, bank, defY) : items ? fromItems(items, bank, defY) : null;
-      if (!found || !found.length) found = lines.map(l => fromLine(l, bank, defY)).filter(Boolean);
+      const tr = items && isTRStatement(joined) ? trStatement(items, defY) : null;
+      let found = tr ? tr.found : table ? fromTable(table, bank, defY) : items ? fromItems(items, bank, defY) : null;
+      if (!tr && (!found || !found.length)) found = lines.map(l => fromLine(l, bank, defY)).filter(Boolean);
       found = found.filter(r => !(["div","int"].includes(r.tipo) && r.raw<0)); // cargos que no son cobros
-      const movs = table ? allFromTable(table, defY) : items ? allFromItems(items, defY) : [];
+      const movs = tr ? tr.movs : table ? allFromTable(table, defY) : items ? allFromItems(items, defY) : [];
       orderFile(movs);
       const hasRet = found.some(r => r.tipo==="ret");
       // Si vuelves a subir el mismo archivo, sustituye su versión anterior
@@ -1881,10 +1939,14 @@ const kDays = k => Date.UTC(Math.floor(k/1e4), Math.floor(k/100)%100-1, k%100)/8
 const kFmt = k => k ? `${String(k%100).padStart(2,"0")}/${String(Math.floor(k/100)%100).padStart(2,"0")}/${Math.floor(k/1e4)}` : "";
 const fileYear = txt => { const c = {}; for (const m of String(txt).matchAll(/\b(20\d{2})\b/g)) c[m[1]] = (c[m[1]]||0)+1; const b = Object.entries(c).sort((a,b)=>b[1]-a[1])[0]; return b ? +b[0] : curYear; };
 // Solo se guardan los 4 últimos dígitos del IBAN, para distinguir cuentas del mismo banco
+// El IBAN español tiene 24 caracteres: lo que venga detrás (un código postal, por ejemplo) no es del IBAN
+const ibanEnd = raw => { const s = raw.replace(/\s/g,""); return (/^ES/.test(s) ? s.slice(0,24) : s).slice(-4); };
 const acctOf = (bank, text) => {
-  const m = String(text).match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){4,7}(?: ?[A-Z0-9]{1,3})?\b/); if (m) return bank + " ···" + m[0].replace(/\s/g,"").slice(-4);
+  const ib = String(text).match(/\bIBAN:?\s*([A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?)/); if (ib) return bank + " ···" + ibanEnd(ib[1]);
+  const m = String(text).match(/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){4,7}(?: ?[A-Z0-9]{1,3})?\b/); if (m) return bank + " ···" + ibanEnd(m[0]);
   // Cuenta enmascarada («Número de Cuenta: 0073 0100 59……»): los últimos dígitos visibles
   const n = String(text).match(/n[uú]mero de cuenta:?\s*((?:\d[\d\s]{6,}\d))/i); if (n){ const d = n[1].replace(/\s/g,""); return bank + " ···" + d.slice(-4); }
+  const st = String(text).match(/\*{2,}\s?(\d{4})\b/); if (st) return bank + " ···" + st[1];
   return bank; };
 
 function allFromItems(rawLines, defY){
@@ -2347,19 +2409,24 @@ function parseInstrTable(lines){
   const all = lines.map(l => T(l).join(" ")).join("\n");
   const cripto = /criptomoneda|cripto/i.test(all.slice(0, 3000));
   const pos = []; let inT = false, cur = null, total = null;
-  const QTY = /^-?[\d.]+(,\d+)?$/;
+  const QTY = /^-?[\d.]+(,\d+)?(\s*t[ií]t\.?)?$/i;
   for (const l of lines){
     const t = T(l); if (!t.length) continue; const line = t.join(" ");
-    if (/valor nominal/i.test(line) && /nombre del instrumento|instrumento/i.test(line)){ inT = true; continue; }
-    const tot = line.match(/valores? de mercado totales?:?\s*(-?[\d.]+,\d{2})/i); if (tot){ total = parseAny(tot[1]); inT = false; continue; }
+    if (/valor nominal/i.test(line) && /nombre del (instrumento|valor)/i.test(line)){ inT = true; continue; }
+    // Total de cada cuenta («VALORES DE MERCADO TOTALES: 718,85 €» o «NÚMERO DE POSICIONES: 10 · 48.828,61 EUR»): se suman
+    const tot = line.match(/valores? de mercado totales?:?\s*(-?[\d.]+,\d{2})|n[uú]mero de posiciones:?\s*\d+\s+(-?[\d.]+(?:,\d{1,2})?)\s*(?:€|eur)/i);
+    if (tot){ total = (total || 0) + parseAny(tot[1] || tot[2]); inT = false; continue; }
     if (!inT) continue;
     if (t.length >= 3 && QTY.test(t[0]) && IS_AMT(t[t.length-1]) && !IS_AMT(t[1])){
       const nombre = t[1].replace(/\s+/g, " ").trim(), nums = t.slice(2).map(parseAny);
       const tipo = cripto ? "cripto" : /\b(fund|fondo|fi|fim)\b/i.test(nombre) ? "fondo" : "acc";
-      cur = { nombre, tipo, qty:parseAny(t[0]), precio:nums[0], valor:nums[nums.length-1], coste:nums.length >= 4 ? nums[1] : undefined };
+      cur = { nombre, tipo, qty:parseAny(t[0].replace(/\s*t[ií]t\.?$/i, "")), precio:nums[0], valor:nums[nums.length-1], coste:nums.length >= 4 ? nums[1] : undefined };
       pos.push(cur); continue;
     }
-    if (cur){ const isin = line.match(/\b([A-Z]{2}[A-Z0-9]{9}\d)\b/); if (isin && !cur.isin) cur.isin = isin[1]; }
+    if (cur){
+      const isin = line.match(/\b([A-Z]{2}[A-Z0-9]{9}\d)\b/); if (isin && !cur.isin) cur.isin = isin[1];
+      const cust = line.match(/pa[ií]s de custodia:?\s*(.+)$/i); if (cust) cur.custodia = cust[1].trim();
+    }
   }
   // El precio del extracto viene redondeado: mejor el que sale del valor de mercado
   for (const p of pos) if (p.qty) p.precio = Math.round(p.valor / p.qty * 1e6) / 1e6;
@@ -2375,10 +2442,13 @@ async function handlePatFiles(list, hash){
       if (!d.pos.length && d.efectivo==null){ msgs.push(`En ${f.name} no he encontrado posiciones ni efectivo. ¿Es un extracto de patrimonio o de cartera?`); continue; }
       normInm();
       const s = state.settings, ent = d.entidad;
-      s.cartera = s.cartera.filter(i => i.src!==ent);
+      // Trade Republic da un extracto para las acciones y otro para la cripto: cada uno sustituye solo lo suyo
+      const kind = d.efectivo!=null ? "todo" : d.pos.every(p => p.tipo==="cripto") ? "cripto" : d.pos.every(p => p.tipo!=="cripto") ? "valores" : "todo";
+      const mine = i => (i.src===ent || String(i.src||"").startsWith(ent+"|")) && (kind==="todo" || (kind==="cripto") === (i.tipo==="cripto"));
+      s.cartera = s.cartera.filter(i => !mine(i));
       for (const p of d.pos) s.cartera.push({ id:uid(), nombre: p.nombre + (p.ticker ? ` (${p.ticker})` : ""), tipo:p.tipo, entidad:ent, qty:p.qty, precio:p.precio, valor:p.valor,
-        ext: !!(p.custodia && !/espa[ñn]a/i.test(p.custodia)), isin:p.isin, src:ent, fecha:d.fecha });
-      s.patDocs = (s.patDocs||[]).filter(x => x.entidad!==ent).concat({ entidad:ent, fecha:d.fecha, file:f.name, n:d.pos.length, efectivo:d.efectivo, total:d.total, hash });
+        ext: !!(p.custodia && !/espa[ñn]a/i.test(p.custodia)), isin:p.isin, src:ent+"|"+kind, fecha:d.fecha });
+      s.patDocs = (s.patDocs||[]).filter(x => !(x.entidad===ent && (kind==="todo" || (x.kind||"todo")===kind))).concat({ entidad:ent, kind, fecha:d.fecha, file:f.name, n:d.pos.length, efectivo:d.efectivo, total:d.total, hash });
       const sum = d.pos.reduce((t,p) => t+(p.valor||0), 0) + (d.efectivo||0);
       if (d.total!=null && Math.abs(sum - d.total) > 0.05) msgs.push(`${f.name}: la suma leída (${eur(sum)}) no coincide con el total del extracto (${eur(d.total)}). Revisa las posiciones en Inversiones.`);
       const y = yearOf(d.fecha); if (y && y!==curYear) msgs.push(`${f.name} es de ${y} y tienes abierto ${curYear}: lo he guardado en ${curYear}.`);
@@ -2400,7 +2470,7 @@ $("pdocs").addEventListener("click", e => {
   const b = e.target.closest("[data-pdel]"); if (!b) return;
   if (!b.dataset.armed){ b.dataset.armed = "1"; b.textContent = "¿Seguro? Toca otra vez"; setTimeout(() => { if (b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); return; }
   const s = state.settings, d = (s.patDocs||[])[+b.dataset.pdel]; if (!d) return;
-  s.patDocs = s.patDocs.filter(x => x!==d); s.cartera = (s.cartera||[]).filter(i => i.src!==d.entidad);
+  s.patDocs = s.patDocs.filter(x => x!==d); s.cartera = (s.cartera||[]).filter(i => i.src!==d.entidad && i.src!==d.entidad+"|"+(d.kind||"todo"));
   save(); render();
 });
 const pdrop = $("pdrop"), pfile = $("pfile");
@@ -2422,7 +2492,7 @@ function knownHash(h){
   const n = state.rows.find(r => r.hash===h); if (n) return {name:n.file, tab:"Nóminas"};
   return null;
 }
-const RE_PAT = /extracto de (criptomonedas|valores|cartera)|listado de (criptomonedas|valores)|valor nominal.{0,40}nombre del instrumento|patrimonio neto|extracto (de|del) (patrimonio|cartera|posiciones)|posiciones a fecha|resumen de (la )?(cartera|posiciones)|composici[oó]n de (la )?cartera|cartera de valores a/i;
+const RE_PAT = /extracto de (la )?(cuenta de )?(criptomonedas|valores|cartera)|listado de (criptomonedas|valores)|valor nominal.{0,40}nombre del instrumento|patrimonio neto|extracto (de|del) (patrimonio|cartera|posiciones)|posiciones a fecha|resumen de (la )?(cartera|posiciones)|composici[oó]n de (la )?cartera|cartera de valores a/i;
 const RE_NOM = /total devengad|l[ií]quido (a percibir|total)|total a percibir|devengos|contingencias comunes|base (de )?cotizaci[oó]n/i;
 async function classifyDoc(f, buf){
   if (!/\.pdf$/i.test(f.name) && f.type!=="application/pdf") return {kind:"bank"};

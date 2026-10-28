@@ -268,6 +268,13 @@ table.umov tr.trf td{color:var(--muted)}
 table.accts input.alias{width:100%;min-width:140px}
 table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
 .filechip button{padding:0 4px;font-size:13px}
+.certcmp{min-width:0;font-size:14px}
+.certcmp th,.certcmp td{padding:6px 8px}
+.certmsg{border-radius:8px;padding:10px 12px;font-size:14px;margin:10px 0 0}
+.certmsg.ok{background:var(--refund-soft);color:var(--ink)}
+.certmsg.warn{background:var(--warn-soft);color:var(--ink)}
+.certmsg.info{background:var(--accent-soft);color:var(--ink)}
+.certmsg ul{margin:6px 0 0;padding-left:20px}
 .empty{color:var(--muted);font-size:15px;padding:14px;border:1.5px dashed var(--line);border-radius:10px;text-align:center}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
@@ -418,6 +425,15 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
             <button id="resetLabels" type="button">Restaurar etiquetas</button>
           </div>
         </details>
+      </section>
+
+      <section class="panel" aria-labelledby="h-cert">
+        <div class="panel-head">
+          <h2 id="h-cert">Certificado de retenciones de la empresa</h2>
+          <div class="toolbar"><button id="certAdd" type="button">+ Apuntar a mano</button></div>
+        </div>
+        <p class="note">Es el resumen del año que te da la empresa (suele llegar en enero). Súbelo en PDF con las nóminas: lo reconozco solo y, si es de otro año, lo guardo en ese año. Sirve para <strong>completar los meses que te falten</strong> y para <strong>comprobar que tus nóminas cuadran</strong>. Si solo tienes una foto o captura, apunta sus tres cifras a mano.</p>
+        <div id="certBox"></div>
       </section>
 
       <section class="panel" aria-labelledby="h-najust">
@@ -1012,15 +1028,31 @@ function compute(over={}){
   const remaining = Math.max(0, 12 - monthsCovered);
   const tipoMedioIrpf = avg("dev") ? avg("irpf")/avg("dev") : 0;
   const extraImp = s.extraImp!=null ? s.extraImp : avg("dev");
-  const proj = { meses: s.proj?remaining:0, extras: s.proj?(s.extraN||0):0 };
-  proj.dev = proj.meses*avg("dev") + proj.extras*extraImp;
-  proj.ss = proj.meses*avg("ss");
-  proj.irpf = proj.meses*avg("irpf") + proj.extras*extraImp*tipoMedioIrpf;
-  const projMonths = [];
-  if (s.proj){ const used = new Set(rows.map(r=>r.mes)); for (let m=0; m<12 && projMonths.length<remaining; m++) if (!used.has(m)) projMonths.push(m); }
+  // Certificado de retenciones de la empresa: manda sobre la proyección y completa lo que falte
+  const certs = certsOf(s).filter(x => x.dev>0);
+  const cert = s.certUse!==false && certs.length ? {
+    dev: certs.reduce((t,x)=>t+(x.dev||0),0), irpf: certs.reduce((t,x)=>t+(x.irpf||0),0),
+    ss: certs.every(x => x.ss!=null) ? certs.reduce((t,x)=>t+(x.ss||0),0) : null } : null;
+  let proj; const projMonths = [];
+  if (cert){
+    const used = new Set(rows.filter(r=>r.mes!=null).map(r=>r.mes));
+    for (let m=0; m<12; m++) if (!used.has(m)) projMonths.push(m);
+    proj = { cert:true, meses:projMonths.length, extras:0, dev:cert.dev - real.dev, irpf:cert.irpf - real.irpf,
+      ss: cert.ss!=null ? cert.ss - real.ss : projMonths.length*avg("ss") };
+  } else {
+    proj = { meses: s.proj?remaining:0, extras: s.proj?(s.extraN||0):0 };
+    proj.dev = proj.meses*avg("dev") + proj.extras*extraImp;
+    proj.ss = proj.meses*avg("ss");
+    proj.irpf = proj.meses*avg("irpf") + proj.extras*extraImp*tipoMedioIrpf;
+    if (s.proj){ const used = new Set(rows.map(r=>r.mes)); for (let m=0; m<12 && projMonths.length<remaining; m++) if (!used.has(m)) projMonths.push(m); }
+  }
+  // Lo que se pinta en cada mes sin nómina
+  const projPer = cert ? (proj.meses ? { dev:Math.max(0,proj.dev/proj.meses), ss:Math.max(0,proj.ss/proj.meses), irpf:Math.max(0,proj.irpf/proj.meses) } : {dev:0,ss:0,irpf:0})
+    : { dev:avg("dev"), ss:avg("ss"), irpf:avg("irpf") };
 
   // Trabajo: nómina + rescate del plan de pensiones (un seguro de ahorro va al ahorro, solo por la ganancia)
-  const RIsal = Math.max(0, real.dev + proj.dev - (s.exentos||0));
+  // El íntegro del certificado ya viene sin los devengos exentos
+  const RIsal = Math.max(0, real.dev + proj.dev - (cert ? 0 : (s.exentos||0)));
   const rescSeguro = s.rescTipo==="seguro";
   const rescAll = Math.max(0, s.resc||0);
   const resc = rescSeguro ? 0 : rescAll;
@@ -1096,7 +1128,7 @@ function compute(over={}){
   const CL = Math.max(0, cuotaInt - dedSmi - dedDI);
   const retAh = bk ? bk.ret : (s.retAh||0);
   const resultado = CL - RET - retAh - retResc;
-  return { real, proj, projMonths, avg:{dev:avg("dev"),ss:avg("ss"),irpf:avg("irpf")}, tipoMedioIrpf, extraImp,
+  return { real, proj, projMonths, projPer, cert, certs, avg:{dev:avg("dev"),ss:avg("ss"),irpf:avg("irpf")}, tipoMedioIrpf, extraImp,
     RIsal, resc, rescRed, rescSeguro, rescSeg, rescFuera, RI, RIcomp, SS, gastos, otros2000, RN, red, trabNeto, BLG, BA, otrasRentas,
     inms, alqIng, alqNeto, alqRed, alqNetoRed, alqImp, rcm0, gp0, cross, compGP, compRCM, pendFut,
     cE, cA, cuotaInt, dedSmi, dedDI, bk, ventasInv, staking, CL, RET, retAh, retResc, resultado };
@@ -1138,14 +1170,14 @@ function render(){
   const tasaT = c.real.dev ? c.real.irpf/c.real.dev : NaN;
   tfoot.innerHTML = `<tr><td class="l" colspan="2">Total cobrado (${state.rows.length} ${state.rows.length===1?"nómina":"nóminas"})</td>
     <td class="num">${fmt(c.real.dev)}</td><td class="num">${fmt(c.real.ss)}</td><td class="num">${fmt(c.real.irpf)}</td><td class="num">${pct(tasaT)}</td><td class="num">${fmt(c.real.liq)}</td><td colspan="2"></td></tr>`;
-  renderSummary(c); renderChart(c); renderSettings(); renderBank(); renderYear();
+  renderSummary(c); renderChart(c); renderSettings(); renderCert(c); renderBank(); renderYear();
 }
 
 function renderSummary(c){
   const pay = c.resultado > 0.005, ex = isExRows(state.rows);
   const res = document.getElementById("result");
   res.className = "result " + (pay ? "pay" : "refund");
-  const sub = `${state.settings.proj ? "Proyectando el año completo" : "Solo con lo cobrado hasta ahora"}${ex?" · nóminas de ejemplo":""}${c.bk?` · ${c.bk.n} movimientos de banco`:""}`;
+  const sub = `${c.cert ? "Con el certificado de retenciones de la empresa" : state.settings.proj ? "Proyectando el año completo" : "Solo con lo cobrado hasta ahora"}${ex?" · nóminas de ejemplo":""}${c.bk?` · ${c.bk.n} movimientos de banco`:""}`;
   res.innerHTML = `<span class="k">${pay ? "Te saldría a pagar" : "Te saldría a devolver"}</span><span class="v">${eur(Math.abs(c.resultado))}</span><span class="s">${sub}</span>`;
   document.getElementById("rbar").className = "rbar" + (pay ? " pay" : "");
   document.getElementById("rbarK").textContent = `Renta ${curYear} · ${pay ? "a pagar" : "a devolver"}`;
@@ -1167,12 +1199,13 @@ function renderSummary(c){
     "Staking y lending de cripto":"0033 (por confirmar)", "Ventas de acciones, fondos y cripto":"0324 fondos · 0339/0340 acciones · 1800 cripto",
     "Otras ganancias o pérdidas":"Ganancias y pérdidas", "Pérdidas anteriores contra ganancias":"0392–0460", "Pérdidas anteriores contra dividendos (25 %)":"0392–0460",
     "Deducción doble imposición internacional":"Ded. doble imposición internacional", "Rendimiento neto reducido de inmuebles":"0102–0150" };
-  const row = (k,v,cls="") => { const cas = CAS[k] || (k.startsWith("Proyección") ? "0003" : ""); return `<div class="row ${cls}"><span>${k}${cas?` <small class="cas">${cas}</small>`:""}</span><span>${v}</span></div>`; };
+  const row = (k,v,cls="") => { const cas = CAS[k] || (/^(Proyección|Completado con|Ajuste al certificado)/.test(k) ? "0003" : ""); return `<div class="row ${cls}"><span>${k}${cas?` <small class="cas">${cas}</small>`:""}</span><span>${v}</span></div>`; };
   const neg = v => "−"+eur(v);
   const s = state.settings;
   let h = `<div class="sec">Rendimientos del trabajo</div>`;
   h += row("Nóminas: devengado cobrado", eur(c.real.dev), "sub");
-  if (s.proj) h += row(`Proyección: ${c.proj.meses} ${c.proj.meses===1?"mes":"meses"}${c.proj.extras?` + ${c.proj.extras} extra`:""}`, eur(c.proj.dev), "sub");
+  if (c.proj.cert){ if (Math.abs(c.proj.dev)>0.005) h += row(c.proj.meses ? `Completado con el certificado: ${c.proj.meses} ${c.proj.meses===1?"mes":"meses"} sin nómina` : "Ajuste al certificado de retenciones", eur(c.proj.dev), "sub"); }
+  else if (s.proj) h += row(`Proyección: ${c.proj.meses} ${c.proj.meses===1?"mes":"meses"}${c.proj.extras?` + ${c.proj.extras} extra`:""}`, eur(c.proj.dev), "sub");
   if (s.exentos) h += row("Menos devengos exentos", neg(s.exentos), "sub");
   if (c.resc) h += row("Rescate del plan de pensiones", eur(c.resc), "sub");
   if (c.rescRed) h += row("Reducción 40 % aportaciones hasta 2006", neg(c.rescRed), "sub");
@@ -1404,7 +1437,7 @@ function renderChart(c){
   const W=660, H=240, L=52, R=10, T=12, B=28, iw=W-L-R, ih=H-T-B;
   const months = Array.from({length:12}, (_,m)=>({ss:0,irpf:0,dev:0,proj:false}));
   for (const r of state.rows){ if (r.mes==null) continue; const m=months[r.mes]; m.dev+=r.dev||0; m.ss+=r.ss||0; m.irpf+=r.irpf||0; }
-  for (const m of c.projMonths){ Object.assign(months[m], {dev:c.avg.dev, ss:c.avg.ss, irpf:c.avg.irpf, proj:true}); }
+  for (const m of c.projMonths){ Object.assign(months[m], {dev:c.projPer.dev, ss:c.projPer.ss, irpf:c.projPer.irpf, proj:true}); }
   const max = Math.max(1, ...months.map(m=>m.dev));
   const rawStep = max/4, mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
   const step = [1,2,2.5,5,10].map(x=>x*mag).find(x=>x>=rawStep);
@@ -2494,17 +2527,20 @@ function knownHash(h){
   const b = state.bank.files.find(f => f.hash===h); if (b) return {name:b.name, tab:"Bancos"};
   const p = (state.settings.patDocs||[]).find(d => d.hash===h); if (p) return {name:p.file, tab:"Patrimonio"};
   const n = state.rows.find(r => r.hash===h); if (n) return {name:n.file, tab:"Nóminas"};
+  const ct = certsOf(state.settings).find(x => x.hash===h); if (ct) return {name:ct.file, tab:"Nóminas (certificado)"};
   return null;
 }
 const RE_PAT = /extracto de (la )?(cuenta de )?(criptomonedas|valores|cartera)|listado de (criptomonedas|valores)|valor nominal.{0,40}nombre del instrumento|patrimonio neto|extracto (de|del) (patrimonio|cartera|posiciones)|posiciones a fecha|resumen de (la )?(cartera|posiciones)|composici[oó]n de (la )?cartera|cartera de valores a/i;
 const RE_NOM = /total devengad|l[ií]quido (a percibir|total)|total a percibir|devengos|contingencias comunes|base (de )?cotizaci[oó]n/i;
 async function classifyDoc(f, buf){
+  if (/^image\//.test(f.type) || /\.(png|jpe?g|heic|webp|gif)$/i.test(f.name)) return {kind:"image"};
   if (!/\.pdf$/i.test(f.name) && f.type!=="application/pdf") return {kind:"bank"};
   if (!window.pdfjsLib) return {kind:"error", msg:"el lector de PDF no ha cargado; recarga la página"};
   let lines;
   try { lines = await pdfLines(buf.slice(0)); }
   catch(e){ return e && e.name==="PasswordException" ? {kind:"nomina-pw"} : {kind:"error", msg:"no se puede abrir el PDF"}; }
   const text = lines.map(l => l.map(i => i[2]).join(" ")).join("\n");
+  if (RE_CERT.test(text)){ const ct = parseCert(lines); if (ct) return {kind:"cert", cert:ct}; }
   const nMov = allFromItems(lines, fileYear(text)).length;
   if (RE_PAT.test(text)){ const d = parsePatDoc(lines, f.name); if (d.pos.length || d.efectivo!=null) return {kind:"pat"}; }
   if (RE_NOM.test(text) && nMov < 15){ const p = parseRow(lines, f.name); if (p && p.dev) return {kind:"nom", lines}; }
@@ -2519,18 +2555,24 @@ async function routeFiles(files){
     const k = knownHash(h);
     if (k && k.name!==f.name){ out.push({f:f.name, cls:"skip", txt:`ya lo tenías subido como «${k.name}» en ${k.tab}. No lo he duplicado.`}); continue; }
     const c = await classifyDoc(f, buf);
-    const cloud = tab => GD.addDoc(f, tab, h) ? " ☁️ También va a tu Drive." : "";
+    const cloud = (tab, y) => GD.addDoc(f, tab, h, y) ? " ☁️ También va a tu Drive." : "";
     if (c.kind==="bank"){ const m = await handleBankFiles([f], h); out.push({f:f.name, to:"Bancos", tab:"bancos", txt:(m.join(" ") + cloud("Bancos")).trim()}); }
     else if (c.kind==="pat"){ const m = await handlePatFiles([f], h); out.push({f:f.name, to:"Patrimonio", tab:"patrimonio", txt:(m.join(" ") + " Las acciones y la cripto también aparecen en Inversiones." + cloud("Patrimonio")).trim()}); }
     else if (c.kind==="nom"){ const r = addParsed(f.name, c.lines, h); out.push({f:f.name, to:"Nóminas", tab:"nominas", txt:((r==="replaced" ? "ya tenías esta nómina con otro nombre de archivo: la he sustituido, no duplicado." : "") + cloud("Nóminas")).trim()}); }
     else if (c.kind==="nomina-pw"){ await tryOpen(f.name, buf.slice(0)); out.push({f:f.name, to:"Nóminas", tab:"nominas", txt:"está protegido con contraseña (suele ser tu DNI). Te la pido en la pestaña Nóminas." + cloud("Nóminas")}); }
+    else if (c.kind==="cert"){
+      const ct = c.cert, r = addCert(ct, f.name, h), other = r.year!==curYear;
+      out.push({f:f.name, to:"Certificado de retenciones " + r.year, tab:other ? null : "nominas", year:other ? r.year : null,
+        txt:`${ct.pagador ? ct.pagador + ": " : ""}íntegro ${eur(ct.dev)}, retenciones ${eur(ct.irpf)}, Seguridad Social ${ct.ss!=null ? eur(ct.ss) : "no la encuentro (apúntala a mano)"}.${r.rep ? " Sustituye al que tenías." : ""}${other ? ` Es del ejercicio ${r.year} y lo he guardado en ese año.` : ""}${cloud("Nóminas", r.year)}`});
+    }
+    else if (c.kind==="image") out.push({f:f.name, cls:"bad", txt:"es una imagen: no leo fotos ni capturas. Si es el certificado de retenciones, apunta sus tres cifras con «+ Apuntar a mano» en Nóminas → Certificado de retenciones."});
     else if (c.kind==="error") out.push({f:f.name, cls:"bad", txt:`no he podido leerlo: ${c.msg}.`});
     else out.push({f:f.name, cls:"bad", txt:"no sé qué documento es: no parece una nómina, ni un extracto de movimientos, ni uno de patrimonio. Si es de un banco, prueba a descargarlo en CSV o Excel."});
   }
   return out;
 }
 function showRoute(out, el){
-  el.innerHTML = out.map(o => `<li class="${o.cls||""}"><strong>${esc(o.f)}</strong>${o.to ? ` <span class="to">→ ${o.to}</span>` : ""}${o.txt ? ` · ${esc(o.txt)}` : ""}${o.tab ? ` <button type="button" class="ghost" data-tab="${o.tab}">Ver</button>` : ""}</li>`).join("");
+  el.innerHTML = out.map(o => `<li class="${o.cls||""}"><strong>${esc(o.f)}</strong>${o.to ? ` <span class="to">→ ${o.to}</span>` : ""}${o.txt ? ` · ${esc(o.txt)}` : ""}${o.tab ? ` <button type="button" class="ghost" data-tab="${o.tab}">Ver</button>` : ""}${o.year ? ` <button type="button" class="ghost" data-goyear="${o.year}">Ver ${o.year}</button>` : ""}</li>`).join("");
 }
 async function routeAndShow(files, el){
   if (!files.length) return;
@@ -2542,6 +2584,8 @@ async function routeAndShow(files, el){
 }
 // Los botones «Ver» llevan a la pestaña donde ha ido cada documento
 ["alog","nlog","blog","plog"].forEach(id => $(id).addEventListener("click", e => {
+  const gy = e.target.closest("[data-goyear]");
+  if (gy){ loadYear(+gy.dataset.goyear); render(); showTab("nominas"); setTimeout(() => $("h-cert")?.scrollIntoView({block:"start", behavior:"smooth"}), 50); return; }
   const b = e.target.closest("[data-tab]"); if (!b) return;
   showTab(b.dataset.tab); document.querySelector(".tabs")?.scrollIntoView({block:"start", behavior:"smooth"});
 }));
@@ -2553,6 +2597,134 @@ async function routeAndShow(files, el){
   ["dragleave","drop"].forEach(ev => adrop.addEventListener(ev, e => { e.preventDefault(); adrop.classList.remove("over"); }));
   adrop.addEventListener("drop", e => routeAndShow([...e.dataTransfer.files], alog));
 }
+
+// ---------- Certificado de retenciones de la empresa (resumen anual de la nómina) ----------
+const RE_CERT = /certificado de retenciones|retenciones e ingresos a cuenta|importe [ií]ntegro satisfecho/i;
+const certsOf = s => Array.isArray(s?.certs) ? s.certs : [];
+function parseCert(lines){
+  const norm = NominaParser.norm;
+  const T = lines.map(l => l.map(i => i[2]).join(" ")), N = T.map(t => norm(t)), all = N.join("\n");
+  if (!/dinerari/.test(all) || !/trabajo|laboral/.test(all)) return null;
+  const AMT = /\d{1,3}(?:\.\d{3})*,\d{2}(?!\d)/g;
+  const nums = t => (t.match(AMT)||[]).map(v => parseFloat(v.replace(/\./g,"").replace(",",".")));
+  const words = j => /[a-z]{5,}/.test(N[j]);
+  // Solo la parte de rendimientos del año (antes de atrasos y reintegros)
+  let end = N.findIndex(t => /atrasos|ejercicios anteriores/.test(t)); if (end<0) end = N.length;
+  const usedL = new Set();
+  let dev = 0, irpf = 0, hit = 0;
+  for (let i=0; i<end; i++){
+    if (!/dinerari/.test(N[i])) continue;
+    let a = nums(T[i]); usedL.add(i);
+    // Si las cifras van en otra fila (cajas un poco desplazadas), la de al lado sin texto
+    for (const j of [i+1, i-1]){
+      if (a.length>=2 || j<0 || j>=end || usedL.has(j) || words(j)) continue;
+      const b = nums(T[j]); if (b.length){ a = a.concat(b); usedL.add(j); }
+    }
+    if (a.length){ dev += a[0]; irpf += a[1]||0; hit++; }
+  }
+  if (!hit) return null;
+  let ss = null;
+  for (let i=0; i<end && ss==null; i++){
+    if (!/19\.2|importe de los gastos/.test(N[i])) continue;
+    for (const j of [i, i+1, i-1]){
+      if (j<0 || j>=end) continue;
+      const a = nums(T[j]);
+      if (a.length && (j===i || !words(j) || /19\.2|gastos/.test(N[j]))){ ss = a[a.length-1]; break; }
+    }
+  }
+  const ej = all.match(/ejercicio\s*(?:de\s*)?(20\d{2})/);
+  let pagador = "";
+  const k = N.findIndex(t => /razon social/.test(t));
+  if (k>=0){
+    const same = T[k].replace(/.*raz[oó]n social:?/i, "").trim();
+    const cands = (same ? [same] : []).concat(T.slice(k+1, k+3));
+    for (const t0 of cands){ const t = t0.replace(/\b[A-Z]\d{7}[A-Z0-9]\b|\b\d{8}[A-Z]\b|N\.?I\.?F\.?:?/gi, "").trim(); if (t && !/domicilio|nif|apellidos/i.test(t)){ pagador = t; break; } }
+  }
+  const r2 = v => Math.round(v*100)/100;
+  return { dev:r2(dev), irpf:r2(irpf), ss: ss==null ? null : r2(ss), ejercicio: ej ? +ej[1] : null, pagador };
+}
+// Guarda el certificado en su ejercicio (aunque no sea el que tienes abierto). El mismo archivo o la misma empresa lo sustituyen.
+function addCert(c, name, hash){
+  const y = c.ejercicio || curYear;
+  const put = list => {
+    const i = list.findIndex(x => (hash && x.hash===hash) || (x.pagador && c.pagador && normC(x.pagador)===normC(c.pagador)) || (!x.pagador && !c.pagador && x.file && x.file===name));
+    const item = { id: i>=0 ? list[i].id : uid(), file:name, hash, pagador:c.pagador||"", ejercicio:y, dev:c.dev, irpf:c.irpf, ss:c.ss };
+    if (i>=0) list[i] = item; else list.push(item);
+    return i>=0;
+  };
+  if (y===curYear){
+    state.settings.certs = certsOf(state.settings).slice(); const rep = put(state.settings.certs);
+    state.settings.certUse = true; save(); render(); return { year:y, rep };
+  }
+  const e = store.drafts[y] || store.saved[y];
+  const data = e ? JSON.parse(JSON.stringify(e.data)) : { rows:[], settings:{}, labels:JSON.parse(JSON.stringify(DEFAULT_LABELS)), bank:{rows:[], files:[], all:[], alias:{}} };
+  data.settings = { ...DEFAULT_SETTINGS, ...(data.settings||{}) };
+  data.settings.certs = certsOf(data.settings).slice(); const rep = put(data.settings.certs); data.settings.certUse = true;
+  store.drafts[y] = { data, at:Date.now() }; writeStore(); renderYear(); window.__gdChanged?.();
+  return { year:y, rep };
+}
+function renderCert(c){
+  const box = $("certBox"), s = state.settings, list = certsOf(s);
+  $("proj").disabled = !!c.cert;
+  $("proj").closest("label").title = c.cert ? "Con el certificado no hace falta proyectar: completa lo que falte con sus cifras" : "";
+  if (!list.length){ box.innerHTML = `<div class="empty">Sin certificado para ${curYear}. Súbelo en PDF arriba o pulsa «+ Apuntar a mano».</div>`; return; }
+  keepFocus(box);
+  const f = (x,k,label) => `<label class="field">${label}<input type="text" inputmode="decimal" id="ct-${x.id}-${k}" data-ct="${x.id}" data-ck="${k}" value="${x[k]==null ? "" : fmt(x[k])}"></label>`;
+  let h = list.map(x => `<div class="inm">
+    <div class="inm-head"><input type="text" id="ct-${x.id}-pagador" data-ct="${x.id}" data-ck="pagador" value="${esc(x.pagador||"")}" placeholder="Empresa que paga" aria-label="Empresa que paga"><button type="button" class="ghost danger" data-ctdel="${x.id}">Quitar</button></div>
+    <div class="fields">${f(x,"dev","Importe íntegro satisfecho, dinerario (€)")}${f(x,"irpf","Retenciones practicadas (€)")}${f(x,"ss","Importe de los gastos: Seguridad Social (€)")}</div>
+    ${x.file ? `<p class="note" style="margin:0">📄 ${esc(x.file)}${x.ss==null ? " · <strong>No he encontrado la Seguridad Social: apúntala a mano.</strong>" : ""}</p>` : ""}
+  </div>`).join("");
+  const ok = list.filter(x => x.dev>0);
+  if (ok.length){
+    const tc = k => ok.reduce((t,x)=>t+(x[k]||0),0);
+    const cert = { dev:tc("dev"), ss:tc("ss"), irpf:tc("irpf") };
+    const usedM = new Set(state.rows.filter(r=>r.mes!=null).map(r=>r.mes));
+    const missing = [...Array(12).keys()].filter(m => !usedM.has(m));
+    const d = k => cert[k] - c.real[k], TOL = 1;
+    const dif = k => { const v = d(k); return Math.abs(v)<=TOL ? `<span style="color:var(--refund)">✓</span>` : (v>0 ? "+" : "") + fmt(v); };
+    h += `<div class="tablebox"><table class="certcmp"><thead><tr><th class="l">Concepto</th><th>Tus nóminas (${state.rows.length})</th><th>Certificado</th><th>${missing.length ? "Falta" : "Diferencia"}</th></tr></thead><tbody>
+      <tr><td class="l">Total devengado / íntegro</td><td class="num">${fmt(c.real.dev)}</td><td class="num">${fmt(cert.dev)}</td><td class="num">${dif("dev")}</td></tr>
+      <tr><td class="l">Seguridad Social</td><td class="num">${fmt(c.real.ss)}</td><td class="num">${fmt(cert.ss)}</td><td class="num">${dif("ss")}</td></tr>
+      <tr><td class="l">IRPF retenido</td><td class="num">${fmt(c.real.irpf)}</td><td class="num">${fmt(cert.irpf)}</td><td class="num">${dif("irpf")}</td></tr>
+    </tbody></table></div>`;
+    let msg, cls;
+    if (!state.rows.length){
+      cls = "info"; msg = `No has subido nóminas de ${curYear}: el año se calcula entero con el certificado.`;
+    } else if (missing.length){
+      const n = missing.length, neg = d("dev") < -TOL;
+      cls = neg ? "warn" : "info";
+      msg = `Tienes ${12-n} de 12 meses. ${n===12 ? "" : `Faltan: <strong>${missing.map(m=>MESES[m]).join(", ")}</strong>. `}`
+        + (neg ? `Pero tus nóminas ya suman <strong>más</strong> devengado que el certificado: revisa si hay alguna nómina repetida o de otro año, o devengos exentos (dietas, cheque comida).`
+               : `Según el certificado, lo que falta suma <strong>${eur(d("dev"))}</strong> de devengado, ${eur(d("ss"))} de Seguridad Social y ${eur(d("irpf"))} de IRPF (unos ${eur(d("dev")/n)} al mes, contando pagas extra).`);
+    } else if (["dev","ss","irpf"].every(k => Math.abs(d(k))<=TOL)){
+      cls = "ok"; msg = `✓ <strong>Cuadra.</strong> Tus 12 meses de nóminas suman lo mismo que el certificado de la empresa.`;
+    } else {
+      cls = "warn"; const tips = [];
+      if (d("dev") < -TOL) tips.push(`Tus nóminas tienen ${eur(-d("dev"))} más de devengado. Suele ser por dietas, cheque comida, seguro médico u otros devengos exentos o en especie, que el certificado no cuenta como dinerario${s.exentos ? ` (has apuntado ${eur(s.exentos)} de exentos)` : ""}.`);
+      if (d("dev") > TOL) tips.push(`El certificado tiene ${eur(d("dev"))} más de devengado: puede faltar una paga extra, unos atrasos o una nómina que no se ha subido.`);
+      if (Math.abs(d("irpf")) > TOL) tips.push(`El IRPF difiere en ${eur(Math.abs(d("irpf")))}: revisa las nóminas marcadas «Revisar» o alguna regularización de diciembre.`);
+      if (Math.abs(d("ss")) > TOL) tips.push(`La Seguridad Social difiere en ${eur(Math.abs(d("ss")))}: comprueba que cada nómina ha cogido el total del trabajador y no el de la empresa.`);
+      msg = `⚠ <strong>No cuadra del todo.</strong> Para Hacienda manda el certificado (es lo que la empresa le declara).<ul>${tips.map(t=>`<li>${t}</li>`).join("")}</ul>`;
+    }
+    h += `<div class="certmsg ${cls}">${msg}</div>`;
+    h += `<label class="toggle" style="margin-top:10px"><input type="checkbox" id="certUse"${s.certUse!==false ? " checked" : ""}> Calcular la renta con el certificado (completa lo que falte en vez de proyectar con la media)</label>`;
+    if (s.certUse!==false && s.exentos) h += `<p class="note">Mientras uses el certificado no resto los devengos exentos de «Ajustes»: su íntegro ya viene sin ellos.</p>`;
+  }
+  box.innerHTML = h;
+}
+$("certBox").addEventListener("change", e => {
+  const el = e.target;
+  if (el.id==="certUse"){ state.settings.certUse = el.checked; save(); render(); return; }
+  const x = certsOf(state.settings).find(x => x.id===el.dataset.ct); if (!x) return;
+  const k = el.dataset.ck; x[k] = k==="pagador" ? el.value.trim() : parseEs(el.value); x.man = true;
+  save(); render();
+});
+$("certBox").addEventListener("click", e => {
+  const b = e.target.closest("[data-ctdel]"); if (!b) return;
+  state.settings.certs = certsOf(state.settings).filter(x => x.id!==b.dataset.ctdel); save(); render();
+});
+$("certAdd").onclick = () => addAndFocus(id => { state.settings.certs = certsOf(state.settings).concat({ id, pagador:"", ejercicio:curYear, dev:null, irpf:null, ss:null, man:true }); state.settings.certUse = true; }, id => `ct-${id}-dev`);
 
 // ---------- Usuarios ----------
 function renderUsers(){
@@ -2864,9 +3036,9 @@ const GD = (() => {
     render();
     if (hasToken()){ clearTimeout(timer); timer = setTimeout(() => sync(), 15000); }
   }
-  function addDoc(file, tab, hash){
+  function addDoc(file, tab, hash, year){
     if (!hosted || !on()) return false;
-    queue.push({ file, tab, hash, name:file.name, year:curYear, user:curUser().name });
+    queue.push({ file, tab, hash, name:file.name, year:year || curYear, user:curUser().name });
     render();
     if (hasToken()){ clearTimeout(timer); timer = setTimeout(() => sync(), 1500); }
     return true;
@@ -3101,7 +3273,7 @@ async function generateReport(){
       [B(pay ? "Resultado: a pagar" : "Resultado: a devolver"), B(eur(Math.abs(c.resultado)))], ["Patrimonio neto", eur(P0.neto)]
     ], { num:[1], fs:9.5 });
     if (ex || bkEx) para(`Atención: ${[ex?"las nóminas":"", bkEx?"los movimientos fiscales de banco":""].filter(Boolean).join(" y ")} son datos de ejemplo de la página. Carga los tuyos para que el informe sea real.`, 9, [163,65,47]);
-    para(`${s.proj ? "Las nóminas se proyectan hasta diciembre con la media de las cobradas." : "Solo cuenta lo cobrado hasta ahora."} Es una estimación orientativa: el dato que manda es el borrador de la Agencia Tributaria.`);
+    para(`${c.cert ? "Las nóminas se completan con el certificado de retenciones de la empresa." : s.proj ? "Las nóminas se proyectan hasta diciembre con la media de las cobradas." : "Solo cuenta lo cobrado hasta ahora."} Es una estimación orientativa: el dato que manda es el borrador de la Agencia Tributaria.`);
     sub("Contenido");
     para("1. Liquidación del IRPF · 2. Nóminas y resumen tipo certificado de retenciones · 3. Ahorro: bancos, ventas y compensaciones · 4. Inversiones y aportaciones · 5. Plan de pensiones · 6. Inmuebles · 7. Patrimonio · 8. Movimientos bancarios unificados · 9. Comparación entre años", 9.5, INK);
 
@@ -3130,7 +3302,7 @@ async function generateReport(){
     ensure(62);
     const ch = { x:M+14, y, w:IW-14, h:50 }, months = Array.from({length:12}, () => ({dev:0, ss:0, irpf:0, proj:false}));
     for (const r of nom){ if (r.mes==null) continue; const m = months[r.mes]; m.dev += r.dev||0; m.ss += r.ss||0; m.irpf += r.irpf||0; }
-    for (const m of c.projMonths) Object.assign(months[m], {dev:c.avg.dev, ss:c.avg.ss, irpf:c.avg.irpf, proj:true});
+    for (const m of c.projMonths) Object.assign(months[m], {dev:c.projPer.dev, ss:c.projPer.ss, irpf:c.projPer.irpf, proj:true});
     const mx = Math.max(1, ...months.map(m=>m.dev)), step = niceStep(mx/4), top = Math.ceil(mx/step)*step;
     doc.setFontSize(7); doc.setDrawColor(...LINE); doc.setLineWidth(0.1);
     for (let v=0; v<=top+1e-6; v+=step){ const yy = ch.y + ch.h - v/top*ch.h; doc.line(ch.x, yy, ch.x+ch.w, yy); doc.setTextColor(...MUT); doc.text(fmt(v,0), ch.x-2, yy+1, {align:"right"}); }
@@ -3155,6 +3327,10 @@ async function generateReport(){
       ["Líquido percibido", fmt(c.real.liq), "—"],
       ["Nóminas incluidas", String(nom.length), String(nom.length + c.proj.meses) + (c.proj.extras ? ` + ${c.proj.extras} extra` : "")]
     ], { num:[1,2] });
+    if (c.certs.length){
+      const ct = k => c.certs.reduce((t,x)=>t+(x[k]||0),0);
+      para(`Certificado de la empresa${c.certs.map(x=>x.pagador).filter(Boolean).length ? " (" + c.certs.map(x=>x.pagador).filter(Boolean).join(", ") + ")" : ""}: íntegro dinerario ${eur(ct("dev"))}, retenciones ${eur(ct("irpf"))}, gastos de Seguridad Social ${eur(ct("ss"))}.${c.cert ? " Es el que se usa en el cálculo." : " No se usa en el cálculo."}`, 9.5);
+    }
 
     // ---- 3. Ahorro ----
     title("3. Ahorro: bancos, ventas y compensaciones");

@@ -2880,6 +2880,7 @@ const GD = (() => {
                set:(k,v) => { try { localStorage.setItem(k, v); } catch(e){} }, del:k => { try { localStorage.removeItem(k); } catch(e){} } };
   const hosted = location.protocol==="https:" && /github\.io$/.test(location.hostname);
   let token = null, exp = 0, tc = null, pend = null, busy = false, timer = null, applying = false, choice = null;
+  let forceConsent = false; // tras un permiso incompleto, la siguiente ventana de Google vuelve a mostrar la casilla
   let last = { msg:"", kind:"" };
   const folders = new Map(), queue = [];
   const fail = (code, msg) => Object.assign(new Error(msg || code), { code });
@@ -2902,8 +2903,8 @@ const GD = (() => {
     tc = google.accounts.oauth2.initTokenClient({ client_id:CLIENT_ID, scope:SCOPE,
       callback: r => { const p = pend; pend = null; if (!p) return;
         if (r.error || !r.access_token) return p.ko(fail("denied"));
-        if (google.accounts.oauth2.hasGrantedAllScopes && !google.accounts.oauth2.hasGrantedAllScopes(r, SCOPE)) return p.ko(fail("scope"));
-        token = r.access_token; exp = Date.now() + (+r.expires_in || 3600)*1000; LS.set(K.on, "1"); p.ok(token); },
+        if (google.accounts.oauth2.hasGrantedAllScopes && !google.accounts.oauth2.hasGrantedAllScopes(r, SCOPE)){ forceConsent = true; return p.ko(fail("scope")); }
+        forceConsent = false; token = r.access_token; exp = Date.now() + (+r.expires_in || 3600)*1000; LS.set(K.on, "1"); p.ok(token); },
       error_callback: e => { const p = pend; pend = null; p && p.ko(fail(e && e.type==="popup_closed" ? "closed" : "denied")); } });
   }
   // Tiene que llamarse desde un toque: Google abre una ventanita
@@ -2912,7 +2913,7 @@ const GD = (() => {
     if (!tc) return Promise.reject(fail("gis"));
     return new Promise((ok, ko) => {
       if (pend) pend.ko(fail("closed")); pend = { ok, ko };
-      const o = { prompt: on() ? "" : "consent" }; const who = LS.get(K.who, ""); if (who) o.hint = who;
+      const o = { prompt: on() && !forceConsent ? "" : "consent" }; const who = LS.get(K.who, ""); if (who) o.hint = who;
       tc.requestAccessToken(o);
     });
   }
@@ -2920,10 +2921,21 @@ const GD = (() => {
     if (!hasToken()) throw fail("auth");
     let r; try { r = await fetch(url, { ...opt, headers:{ ...(opt.headers||{}), Authorization:"Bearer "+token } }); } catch(e){ throw fail("net"); }
     if (r.status===401){ token = null; throw fail("auth"); }
-    if (r.status===403 && /storageQuotaExceeded/.test(await r.clone().text().catch(() => ""))) throw fail("full");
-    if (!r.ok) throw fail("http", "Drive respondió " + r.status);
+    if (!r.ok) throw await errorFrom(r);
     return r;
   }
+  // Traduce el error de Google a un código claro y guarda su motivo («accessNotConfigured», etc.) para mostrarlo
+  async function errorFrom(r){
+    let reason = "", message = "";
+    try { const e = (await r.json())?.error || {}; reason = e.errors?.[0]?.reason || e.details?.find(d => d?.reason)?.reason || e.status || ""; message = e.message || ""; } catch(e){}
+    const detail = "Drive respondió " + r.status + (reason ? " · " + reason : "");
+    if (/storageQuotaExceeded|quotaExceeded/i.test(reason)) return fail("full", detail);
+    if (/accessNotConfigured|SERVICE_DISABLED/i.test(reason) || /has not been used|is disabled/i.test(message)) return fail("api", detail);
+    if (/insufficientPermissions|insufficientScopes|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(reason)){ token = null; forceConsent = true; return fail("scope", detail); }
+    if (r.status===429 || /rateLimitExceeded|userRateLimitExceeded|RATE_LIMIT_EXCEEDED/i.test(reason)) return fail("rate", detail);
+    return fail("http", detail);
+  }
+  const SCOPE_MSG = "No se marcó la casilla de Google Drive en la ventana de Google. Toca «Sincronizar» y marca la casilla para permitir el acceso.";
   const q = t => "'" + String(t).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
   const list = async (query, fields) => (await (await api(API + "/files?spaces=drive&orderBy=modifiedTime%20desc&pageSize=10&fields=" + encodeURIComponent("files("+fields+")") + "&q=" + encodeURIComponent(query))).json()).files || [];
   async function folderId(path){
@@ -2944,7 +2956,7 @@ const GD = (() => {
     const r = await api(UPL + "/files" + (id ? "/"+id : "") + "?uploadType=multipart&fields=id,modifiedTime,size", { method: id ? "PATCH" : "POST", headers:{ "Content-Type":"multipart/related; boundary="+b }, body });
     return r.json();
   }
-  async function whoAmI(){ try { const u = (await (await api(API + "/about?fields=user(emailAddress)")).json()).user; if (u?.emailAddress) LS.set(K.who, u.emailAddress); } catch(e){} }
+  async function whoAmI(){ try { const u = (await (await api(API + "/about?fields=user(emailAddress)")).json()).user; if (u?.emailAddress) LS.set(K.who, u.emailAddress); } catch(e){ if (e.code==="scope" || e.code==="api") throw e; } }
 
   // --- Datos (todos los usuarios y años) ---
   const hasLocalData = () => buildBackup().users.some(u => Object.values({ ...(u.data?.saved||{}), ...(u.data?.drafts||{}) })
@@ -3010,7 +3022,7 @@ const GD = (() => {
     if (!hosted || busy) return;
     if (interactive){
       try { await loadGis(); initClient(); await askToken(); }
-      catch(e){ say(e.code==="closed" ? "Has cerrado la ventana de Google sin conectar." : e.code==="net" || e.code==="gis" ? "No se ha podido cargar el acceso de Google. Revisa la conexión." : "Google no ha dado permiso para usar Drive.", "err"); return; }
+      catch(e){ say(e.code==="closed" ? "Has cerrado la ventana de Google sin conectar." : e.code==="net" || e.code==="gis" ? "No se ha podido cargar el acceso de Google. Revisa la conexión." : e.code==="scope" ? SCOPE_MSG : "Google no ha dado permiso para usar Drive.", "err"); return; }
     } else if (!hasToken()) return render();
     busy = true; clearTimeout(timer); render("Sincronizando con Drive…");
     try {
@@ -3025,6 +3037,9 @@ const GD = (() => {
       say(e.code==="auth" ? "La conexión con Google ha caducado. Toca «Sincronizar» para seguir."
         : e.code==="net" ? "Sin conexión con Google. Toca «Sincronizar» cuando vuelvas a tener conexión."
         : e.code==="full" ? "Tu Google Drive está lleno: no cabe la copia."
+        : e.code==="api" ? "La API de Google Drive no está activada en el proyecto de Google Cloud de la app. Hay que activarla en «APIs y servicios → Biblioteca» (" + e.message + ")."
+        : e.code==="scope" ? SCOPE_MSG
+        : e.code==="rate" ? "Google Drive está recibiendo demasiadas peticiones seguidas. Espera un minuto y vuelve a sincronizar."
         : e.code==="bad" ? "El archivo de datos de Drive no es una copia válida de Mi Renta. No he tocado nada."
         : "No se pudo sincronizar (" + (e.message || "error") + ").", "err");
     }
@@ -3056,8 +3071,9 @@ const GD = (() => {
     const chip = $("driveChip"), box = $("driveBox"); if (!chip || !box) return;
     const isOn = on(), who = LS.get(K.who, ""), pendingUp = isOn && (changed() || queue.length);
     chip.hidden = !hosted;
-    chip.className = "drivechip" + (busy || !isOn ? "" : !hasToken() || pendingUp || choice ? " warn" : "");
-    chip.textContent = busy ? "☁️ Sincronizando…" : !isOn ? "☁️ Conectar Drive" : choice ? "☁️ Elige qué datos quedan" : !hasToken() ? "☁️ Toca para sincronizar" : pendingUp ? "☁️ Cambios por subir" : "☁️ Drive al día";
+    const failed = last.kind==="err";
+    chip.className = "drivechip" + (busy || !isOn ? "" : !hasToken() || pendingUp || choice || failed ? " warn" : "");
+    chip.textContent = busy ? "☁️ Sincronizando…" : !isOn ? "☁️ Conectar Drive" : choice ? "☁️ Elige qué datos quedan" : !hasToken() ? "☁️ Toca para sincronizar" : failed ? "☁️ Error en Drive · toca para ver" : pendingUp ? "☁️ Cambios por subir" : "☁️ Drive al día";
     chip.disabled = busy;
     let h = "";
     if (!hosted){
@@ -3078,7 +3094,7 @@ const GD = (() => {
     box.innerHTML = h + `<p class="note st${working ? "" : last.kind ? " " + last.kind : ""}" aria-live="polite">${esc(m || "")}</p>`;
   }
   function mount(){
-    $("driveChip").onclick = () => { if (on() && !choice) sync({ interactive:true }); else { $("driveDet").open = true; $("driveDet").scrollIntoView({ block:"center", behavior:"smooth" }); if (on() && choice) render(); else if (!on()) render(); } };
+    $("driveChip").onclick = () => { if (on() && !choice && !(last.kind==="err" && hasToken())) sync({ interactive:true }); else { $("driveDet").open = true; $("driveDet").scrollIntoView({ block:"center", behavior:"smooth" }); if (on() && choice) render(); else if (!on()) render(); } };
     $("driveBox").addEventListener("click", e => {
       const a = e.target.closest("[data-gd]"); if (!a) return;
       const k = a.dataset.gd;

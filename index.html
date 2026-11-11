@@ -575,10 +575,14 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
         <div class="bkgrid" id="cartTot"></div>
       </section>
       <section class="panel" aria-labelledby="h-vent">
-        <div class="panel-head"><h2 id="h-vent">Ventas en <span class="yr">2026</span></h2><button type="button" id="ventAdd" class="primary">+ Añadir venta</button></div>
+        <div class="panel-head"><h2 id="h-vent">Ventas en <span class="yr">2026</span></h2><div class="toolbar"><button type="button" id="ventImp">⬆ Importar del FIFO</button><button type="button" id="ventAdd" class="primary">+ Añadir venta</button></div></div>
+        <input type="file" id="ventFile" accept=".xlsx,.xls,.csv,.txt" hidden>
+        <p class="note" id="ventMsg" aria-live="polite"></p>
         <p class="note">Esto sí va a la renta (base del ahorro). Pon lo que cobraste al vender, ya descontadas las comisiones, y lo que te costó comprar eso mismo, con comisiones. Si compraste en varias veces, se consideran vendidas primero las más antiguas (FIFO). Cambiar una cripto por otra también cuenta como venta. Con acciones, si recompras las mismas en los 2 meses siguientes a vender con pérdidas, esa pérdida se aplaza. Casillas (Renta 2025): fondos 0324/0325, acciones 0326 a 0340, cripto 1800 (una línea por operación).</p>
         <div class="tablebox"><table class="inv"><thead><tr><th class="l">Activo</th><th class="l">Tipo</th><th class="l">Fecha</th><th>Importe de venta €</th><th>Coste de compra €</th><th>Resultado €</th><th></th></tr></thead><tbody id="ventBody"></tbody></table></div>
         <div class="ledger" id="ventTot" style="max-width:420px"></div>
+        <p class="note" id="ventWarn" hidden></p>
+        <p class="note">«⬆ Importar del FIFO»: en tu hoja Broker pulsa «Calcular FIFO del año», descarga esa pestaña (Archivo → Descargar → Excel o CSV) y súbela aquí o en «Subir documentos». Cada vez que la vuelvas a subir sustituye las ventas que vinieron del FIFO, sin duplicarlas; las que apuntes a mano no se tocan.</p>
       </section>
       <section class="panel" aria-labelledby="h-stk">
         <div class="panel-head"><h2 id="h-stk">Otros rendimientos de cripto</h2></div>
@@ -2284,9 +2288,9 @@ function renderInv(c){
   const prevC = prevCartera(), pb = $("cartPrev");
   pb.hidden = !(cart.length===0 && prevC.length); pb.textContent = `Traer la cartera de ${curYear-1}`;
   keepFocus(vb); vb.innerHTML = ven.length ? ven.map(v => { const r = (v.venta||0)-(v.coste||0); return `<tr>
-    <td class="l"><input type="text" id="v-${v.id}-nombre" data-vid="${v.id}" data-vk="nombre" value="${esc(v.nombre||"")}" placeholder="Qué vendiste" aria-label="Activo" style="width:150px"></td>
+    <td class="l"><input type="text" id="v-${v.id}-nombre" data-vid="${v.id}" data-vk="nombre" value="${esc(v.nombre||"")}" placeholder="Qué vendiste" aria-label="Activo" style="width:150px">${v.src==="FIFO"?`<span class="fname" title="Si cambias algo, hazlo en tu hoja y vuelve a importar">Del FIFO de tu hoja${v.srcAt?" · "+esc(v.srcAt):""}</span>`:""}</td>
     <td class="l"><select id="v-${v.id}-tipo" data-vid="${v.id}" data-vk="tipo" aria-label="Tipo">${optsT(v.tipo, ["acc","fondo","cripto","otro"])}</select></td>
-    <td class="l"><input type="text" id="v-${v.id}-fecha" data-vid="${v.id}" data-vk="fecha" value="${esc(v.fecha||"")}" placeholder="dd/mm/aaaa" aria-label="Fecha" style="width:100px"></td>
+    <td class="l"><input type="text" id="v-${v.id}-fecha" data-vid="${v.id}" data-vk="fecha" value="${esc(v.fecha||"")}" placeholder="dd/mm/aaaa" aria-label="Fecha" style="width:112px"></td>
     <td><input class="money" type="text" inputmode="decimal" id="v-${v.id}-venta" data-vid="${v.id}" data-vk="venta" value="${v.venta==null?"":fmt(v.venta)}" aria-label="Importe de venta"></td>
     <td><input class="money" type="text" inputmode="decimal" id="v-${v.id}-coste" data-vid="${v.id}" data-vk="coste" value="${v.coste==null?"":fmt(v.coste)}" aria-label="Coste de compra"></td>
     <td class="num ${r>=0?"pos":"neg"}">${r>0?"+":""}${fmt(r)}</td>
@@ -2295,6 +2299,10 @@ function renderInv(c){
   const g = ven.filter(v => (v.venta||0)-(v.coste||0) > 0).reduce((t,v)=>t+(v.venta||0)-(v.coste||0),0);
   const p = ven.filter(v => (v.venta||0)-(v.coste||0) < 0).reduce((t,v)=>t+(v.venta||0)-(v.coste||0),0);
   $("ventTot").innerHTML = `<div class="row"><span>Ganancias</span><span class="pos">${eur(g)}</span></div><div class="row"><span>Pérdidas</span><span class="neg">${eur(p)}</span></div><div class="row tot"><span>Resultado que pasa al ahorro</span><span>${eur(g+p)}</span></div>`;
+  // Aviso de doble conteo: ventas con resultado en Bancos y, además, ventas aquí
+  const bkV = c && c.bk ? c.bk.ventas : 0, w = $("ventWarn");
+  w.hidden = !(bkV && ven.length);
+  if (!w.hidden) w.innerHTML = `⚠️ En la pestaña Bancos también hay ventas con resultado (${eur(bkV)}). Se sumarían dos veces: si esas ventas ya están aquí, deja su importe a 0 en Bancos.`;
 }
 function invChange(listKey, idKey, kKey){
   return e => {
@@ -2325,6 +2333,63 @@ function addAndFocus(push, firstId){
 }
 $("cartAdd").onclick = () => addAndFocus(id => state.settings.cartera.push({id, nombre:"", tipo:"fondo", entidad:"", qty:null, precio:null, ext:false}), id => `c-${id}-nombre`);
 $("ventAdd").onclick = () => addAndFocus(id => state.settings.ventas.push({id, nombre:"", tipo:"acc", fecha:"", venta:null, coste:null}), id => `v-${id}-nombre`);
+
+// ---------- Importar ventas desde la pestaña «FIFO <año>» de la hoja Broker ----------
+// Toma la tabla «1. VENTAS» (Fecha venta · Valor · … · Valor de transmisión · Valor de adquisición) hasta la fila TOTAL.
+// Al volver a importar se sustituyen las ventas que vinieron del FIFO; las apuntadas a mano no se tocan.
+const fechaDMY = s => {
+  const m = RE_DATE.exec(String(s||"")); if (!m) return null;
+  let d, mo, y; if (m[1]){ d = +m[1]; mo = +m[2]; y = +m[3]; if (y < 100) y += 2000; } else { y = +m[4]; mo = +m[5]; d = +m[6]; }
+  return { txt: String(d).padStart(2,"0") + "/" + String(mo).padStart(2,"0") + "/" + y, y };
+};
+function parseFifoTable(table){
+  const out = [];
+  for (let i = 0; i < table.length; i++){
+    const r = (table[i]||[]).map(c => String(c??"").trim());
+    const iF = r.findIndex(c => /^fecha venta$/i.test(c)), iV = r.findIndex(c => /^valor$/i.test(c));
+    const iT = r.findIndex(c => /^valor de transmisi/i.test(c)), iA = r.findIndex(c => /^valor de adquisici/i.test(c));
+    if (iF < 0 || iT < 0 || iA < 0) continue;
+    for (i = i + 1; i < table.length; i++){
+      const x = (table[i]||[]).map(c => String(c??"").trim());
+      if (!x.some(Boolean) || /^total$/i.test(x[iF]) || /^no hay ventas/i.test(x[iF])) break;
+      const f = fechaDMY(x[iF]), venta = parseAny(x[iT]), coste = parseAny(x[iA]);
+      if (!f || isNaN(venta) || isNaN(coste)) continue;
+      out.push({ fecha:f.txt, y:f.y, valor:(iV >= 0 ? x[iV] : "") || "Venta", venta, coste });
+    }
+  }
+  return out;
+}
+function applyFifoVentas(rows){
+  if (!rows.length) return "no encuentro la tabla de ventas del FIFO («Fecha venta», «Valor de transmisión», «Valor de adquisición»).";
+  const r2 = v => Math.round(v*100)/100;
+  const mine = rows.filter(r => r.y===curYear), otros = [...new Set(rows.filter(r => r.y!==curYear).map(r => r.y))];
+  if (!mine.length) return `las ventas son de ${otros.join(", ")}, no de ${curYear}. Cambia de ejercicio arriba y vuelve a subirlo.`;
+  // Una línea por venta: se juntan las fracciones del mismo valor vendidas el mismo día
+  const merged = new Map();
+  mine.forEach(r => { const k = r.fecha + "|" + r.valor, m = merged.get(k) || { fecha:r.fecha, valor:r.valor, venta:0, coste:0 }; m.venta += r.venta; m.coste += r.coste; merged.set(k, m); });
+  const s = state.settings; s.ventas = (s.ventas||[]).filter(v => v.src!=="FIFO");
+  const antes = mine.length, hoy = new Date().toLocaleDateString("es-ES");
+  const nuevas = [...merged.values()].map(m => ({ id:uid(), src:"FIFO", srcAt:hoy, key:m.fecha + "|" + m.valor,
+    nombre: m.valor.replace(/^[A-Z]{2,8}:/, ""), tipo: /^CURRENCY:|^(BTC|ETH|ADA|SOL|XRP)/i.test(m.valor) ? "cripto" : "acc",
+    fecha:m.fecha, venta:r2(m.venta), coste:r2(m.coste) }));
+  s.ventas.push(...nuevas);
+  save(); render();
+  const res = nuevas.reduce((t, v) => t + v.venta - v.coste, 0);
+  const dup = s.ventas.filter(v => v.src!=="FIFO" && nuevas.some(n => n.fecha===(fechaDMY(v.fecha)||{}).txt));
+  return `${nuevas.length} venta${nuevas.length===1?"":"s"} de ${curYear}${antes > nuevas.length ? ` (he juntado las fracciones del mismo día)` : ""}, resultado ${res>=0?"+":""}${eur(res)}.`
+    + (otros.length ? ` Había también ventas de ${otros.join(", ")}: no las he tocado.` : "")
+    + (dup.length ? ` ⚠️ Tienes ${dup.length} venta${dup.length===1?"":"s"} apuntada${dup.length===1?"":"s"} a mano con la misma fecha (${dup.map(v => v.nombre||"sin nombre").join(", ")}): si es la misma, bórrala para no contarla dos veces.` : "");
+}
+async function importFifoFile(f){
+  try { const { table } = await readBankSheet(f); return applyFifoVentas(parseFifoTable(table)); }
+  catch(e){ return "no he podido leerlo: " + (e && e.message || e) + "."; }
+}
+$("ventImp").onclick = () => $("ventFile").click();
+$("ventFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; $("ventFile").value = ""; if (!f) return;
+  $("ventMsg").textContent = "Leyendo " + f.name + "…";
+  $("ventMsg").textContent = f.name + ": " + await importFifoFile(f);
+});
 
 // ---------- Patrimonio a 31/12 ----------
 function patrimonio(){
@@ -2534,7 +2599,11 @@ const RE_PAT = /extracto de (la )?(cuenta de )?(criptomonedas|valores|cartera)|l
 const RE_NOM = /total devengad|l[ií]quido (a percibir|total)|total a percibir|devengos|contingencias comunes|base (de )?cotizaci[oó]n/i;
 async function classifyDoc(f, buf){
   if (/^image\//.test(f.type) || /\.(png|jpe?g|heic|webp|gif)$/i.test(f.name)) return {kind:"image"};
-  if (!/\.pdf$/i.test(f.name) && f.type!=="application/pdf") return {kind:"bank"};
+  if (!/\.pdf$/i.test(f.name) && f.type!=="application/pdf"){
+    // La pestaña «FIFO <año>» de la hoja Broker va a Inversiones → Ventas, no a Bancos
+    if (/\.(xlsx?|csv|txt)$/i.test(f.name)){ try { const { table } = await readBankSheet(f); const v = parseFifoTable(table); if (v.length) return {kind:"fifo", rows:v}; } catch(e){} }
+    return {kind:"bank"};
+  }
   if (!window.pdfjsLib) return {kind:"error", msg:"el lector de PDF no ha cargado; recarga la página"};
   let lines;
   try { lines = await pdfLines(buf.slice(0)); }
@@ -2556,6 +2625,7 @@ async function routeFiles(files){
     if (k && k.name!==f.name){ out.push({f:f.name, cls:"skip", txt:`ya lo tenías subido como «${k.name}» en ${k.tab}. No lo he duplicado.`}); continue; }
     const c = await classifyDoc(f, buf);
     const cloud = (tab, y) => GD.addDoc(f, tab, h, y) ? " ☁️ También va a tu Drive." : "";
+    if (c.kind==="fifo"){ out.push({f:f.name, to:"Inversiones · Ventas", tab:"inversiones", txt:applyFifoVentas(c.rows)}); continue; }
     if (c.kind==="bank"){ const m = await handleBankFiles([f], h); out.push({f:f.name, to:"Bancos", tab:"bancos", txt:(m.join(" ") + cloud("Bancos")).trim()}); }
     else if (c.kind==="pat"){ const m = await handlePatFiles([f], h); out.push({f:f.name, to:"Patrimonio", tab:"patrimonio", txt:(m.join(" ") + " Las acciones y la cripto también aparecen en Inversiones." + cloud("Patrimonio")).trim()}); }
     else if (c.kind==="nom"){ const r = addParsed(f.name, c.lines, h); out.push({f:f.name, to:"Nóminas", tab:"nominas", txt:((r==="replaced" ? "ya tenías esta nómina con otro nombre de archivo: la he sustituido, no duplicado." : "") + cloud("Nóminas")).trim()}); }

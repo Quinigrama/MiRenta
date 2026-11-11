@@ -551,7 +551,7 @@ table.accts tr.sum td{border-top:2px solid var(--ink);border-bottom:none}
           </div>
           <div class="fields" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
             <label class="field">Otras ganancias o pérdidas por ventas en <span class="yr">2026</span>, si no las detallas en Inversiones (pérdida en negativo) (€)<input type="text" id="b-gp" inputmode="decimal"></label>
-            <label class="field">Pérdidas pendientes de años anteriores (<span class="yrRange">2022–2025</span>), como la del local (€)<input type="text" id="b-perdAnt" inputmode="decimal"></label>
+            <label class="field">Pérdidas pendientes de años anteriores (<span class="yrRange">2022–2025</span>), como la del local (€)<input type="text" id="b-perdAnt" inputmode="decimal"><span class="hint">Escríbela en positivo (por ejemplo 3.000). Si pones «−3.000» también vale.</span></label>
           </div>
           <details>
             <summary>Sin extractos: datos a mano</summary>
@@ -1078,7 +1078,7 @@ function compute(over={}){
   let rcm = rcm0, gp = gp0, cross = 0;
   if (rcm<0 && gp>0){ const c = Math.min(-rcm, gp*0.25); rcm += c; gp -= c; }
   if (gp<0 && rcm>0){ cross = Math.min(-gp, rcm*0.25); gp += cross; rcm -= cross; }
-  let pend = Math.max(0, s.perdAnt||0), compGP = 0, compRCM = 0;
+  let pend = Math.abs(s.perdAnt||0), compGP = 0, compRCM = 0;   // una pérdida: vale igual escrita con o sin signo «−»
   if (gp>0){ compGP = Math.min(pend, gp); gp -= compGP; pend -= compGP; }
   if (rcm>0){ compRCM = Math.min(pend, rcm, Math.max(0, Math.max(0,rcm0)*0.25 - cross)); rcm -= compRCM; pend -= compRCM; }
   const pendFut = pend + Math.max(0,-gp) + Math.max(0,-rcm);
@@ -1541,7 +1541,7 @@ for (const [id,k,t] of SET_FIELDS){
   document.getElementById(id).addEventListener("change", e => {
     const v = t==="int" ? Math.max(0, parseInt(e.target.value)||0) : parseEs(e.target.value);
     if ((k==="ahorro"||k==="retAh") && bankTotals(false)) return;
-    state.settings[k] = (k==="extraImp") ? v : (v ?? (k==="minE"?P.minE:k==="minA"?P.minA:0));
+    state.settings[k] = (k==="extraImp") ? v : (k==="perdAnt" && v!=null) ? Math.abs(v) : (v ?? (k==="minE"?P.minE:k==="minA"?P.minA:0));
     save(); render();
   });
 }
@@ -3435,7 +3435,7 @@ async function generateReport(){
     table(["Activo", "Tipo", "Fecha", "Venta", "Coste", "Resultado"], (s.ventas||[]).map(v => [v.nombre||"—", TIPO_INV[v.tipo]||"", v.fecha||"", fmt(v.venta||0), fmt(v.coste||0), fmt((v.venta||0)-(v.coste||0))]), { num:[3,4,5] });
     table(["Otros datos del ahorro", "Importe"], [
       ["Staking y lending de cripto", eur(c.staking)], ["Otras ganancias o pérdidas", eur(c.gp0 - c.ventasInv)],
-      ["Pérdidas de años anteriores pendientes", eur(s.perdAnt||0)], ["Pérdidas compensadas este año", eur(c.cross + c.compGP + c.compRCM)],
+      ["Pérdidas de años anteriores pendientes", eur(Math.abs(s.perdAnt||0))], ["Pérdidas compensadas este año", eur(c.cross + c.compGP + c.compRCM)],
       ["Pérdidas que quedan para próximos años", eur(c.pendFut)], ["Base liquidable del ahorro", B(eur(c.BA))]
     ], { num:[1] });
 
